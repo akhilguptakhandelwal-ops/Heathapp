@@ -326,7 +326,7 @@ canvas.stage { display: block; touch-action: none; box-shadow: 0 0 0 1px #2a241d
 .time { font-size: 13.5px; color: var(--muted); }
 .tl-card { padding: 10px; }
 .tl-wrap { border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
-canvas.tl { display: block; width: 100%; height: 150px; touch-action: none; cursor: pointer; }
+canvas.tl { display: block; width: 100%; height: 222px; touch-action: none; cursor: pointer; min-width: 0; }
 .tl-tools { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
 .tl-tools .icon-btn { width: 36px; height: 36px; }
 .sel-bar { display: flex; align-items: center; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
@@ -383,3 +383,24 @@ canvas.tl { display: block; width: 100%; height: 150px; touch-action: none; curs
 
 .version-row { display: flex; align-items: center; gap: 10px; font-size: 14px; }
 .form .clip-row label.check { display: flex !important; margin: 0 !important; }
+
+/* timeline: track buttons on the left, big tool buttons below */
+.tl-wrap { display: grid; grid-template-columns: 76px minmax(0, 1fr); background: #16130f; }
+.tl-tracks { position: relative; height: 222px; border-right: 1px solid var(--line); }
+.track-btn {
+  position: absolute; left: 4px; right: 4px; border-radius: 10px; border: 1.5px solid var(--line);
+  background: var(--surface-2); color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; font-weight: 700; font-size: 12px; cursor: pointer; padding: 0;
+}
+.track-btn.on { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.track-btn.track-music.on { background: var(--sage); border-color: var(--sage); }
+.tool-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px; }
+.tool-big {
+  min-height: 68px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface-3); color: var(--text);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-weight: 700; font-size: 12.5px; cursor: pointer; padding: 4px;
+}
+.tool-big:active { transform: scale(.96); }
+.tool-big:disabled { opacity: .35; }
+.tool-big.danger { color: #f0a693; border-color: rgba(201, 74, 50, .55); background: rgba(201, 74, 50, .14); }
+.tool-big.armed { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.sel-bar .sel-info { text-align: left; font-size: 13px; color: var(--text); }

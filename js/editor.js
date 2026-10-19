@@ -10,8 +10,9 @@ import { settings } from './settings.js';
 import { openRecorder } from './recorder.js';
 
 const PAD = 14;
-const LANES = { ruler: [0, 18], video: [22, 30], voice: [58, 48], music: [112, 32] };
-const TL_H = 150;
+const LANES = { ruler: [0, 22], video: [26, 54], voice: [86, 72], music: [164, 54] };
+const TL_H = 222;
+const TRACKS = [['video', 'film', 'Video'], ['voice', 'mic', 'Voice'], ['music', 'music', 'Music']];
 const C = {
   bg: '#16130f', lane: '#1f1a15', ruler: '#8c806d', block1: '#3d3327', block2: '#30281f', blockText: '#e9dcc6',
   voice: '#d39b47', voiceMute: '#4b4237', music: '#8aa47f', join: '#c94a32', sel: 'rgba(211,155,71,0.20)', selEdge: '#e2b066',
@@ -134,6 +135,7 @@ export async function editorScreen(root, { recId }) {
     T = clamp(T, 0, M.outD);
     if (sel) { sel.a = clamp(sel.a, 0, M.outD); sel.b = clamp(sel.b, 0, M.outD); if (sel.b - sel.a < 0.05) sel = null; }
     saveRec();
+    if (fitted) pps = fitPps();
     clampScroll();
     renderPanels();
     renderSel();
@@ -161,25 +163,58 @@ export async function editorScreen(root, { recId }) {
     changed();
   }
 
+  // Which tracks the scissors / delete act on.
+  const selTracks = new Set(['video']);
+  let markA = null; // first scissors press
+
   function requireSel() {
-    if (!sel) { toast('First select a part: long-press on the timeline and drag, or use Mark In / Mark Out'); return false; }
+    if (!sel) { toast('Press ✂ at the start, move, press ✂ again at the end (or long-press and drag on the timeline)', 4000); return false; }
     return true;
   }
+  function scissors() {
+    if (markA == null) {
+      markA = T;
+      sel = null;
+      toast('Start marked ✂ — move to the end and press ✂ again');
+    } else {
+      const a = Math.min(markA, T), b = Math.max(markA, T);
+      markA = null;
+      if (b - a < 0.05) { toast('Move the playhead first, then press ✂ again'); renderSel(); drawTL(); return; }
+      sel = { a, b };
+      toast(`Piece selected (${(b - a).toFixed(1)}s) — press Delete to remove it`);
+    }
+    renderSel(); drawTL();
+  }
   function cutSel() {
-    if (!requireSel()) return;
     const a = sel.a;
     const len = sel.b - sel.a;
     commit((e) => e.cuts.push(...M.outRangeToSrc(sel.a, sel.b)));
     sel = null;
     T = a;
-    toast(`Cut ${len.toFixed(1)}s from video + voice`);
+    toast(`Removed ${len.toFixed(1)}s — undo brings it back`);
   }
-  function gainSel(track, g, label) {
-    if (!requireSel()) return;
-    const gid = uid();
+  function gainSel(track, g, gid = uid()) {
     const src = M.outRangeToSrc(sel.a, sel.b);
     commit((e) => src.forEach(([a, b]) => e.gains.push({ id: uid(), gid, track, a, b, g })));
-    toast(label);
+  }
+  function deleteSel() {
+    if (!requireSel()) return;
+    if (selTracks.has('video')) { cutSel(); renderSel(); return; }
+    const tracks = [...selTracks].filter((t) => t !== 'music' || edl.music);
+    if (!tracks.length) return toast('Add music first (below)');
+    const gid = uid();
+    tracks.forEach((t) => gainSel(t, 0, gid));
+    toast(`${tracks.map((t) => (t === 'voice' ? 'Voice' : 'Music')).join(' + ')} deleted in this piece — undo brings it back`, 3500);
+  }
+  async function volumeSel() {
+    if (!requireSel()) return;
+    const tracks = [...selTracks].filter((t) => t !== 'video' && (t !== 'music' || edl.music));
+    if (!tracks.length) return toast('Select Voice or Music (left of the timeline) to change volume');
+    const g = await askVolume(`${tracks.map((t) => (t === 'voice' ? 'Voice' : 'Music')).join(' + ')} volume for this piece`, 150);
+    if (g == null) return;
+    const gid = uid();
+    tracks.forEach((t) => gainSel(t, g, gid));
+    toast(`Volume set to ${Math.round(g * 100)}%`);
   }
   async function askVolume(title, start) {
     let val = start;
@@ -203,24 +238,21 @@ export async function editorScreen(root, { recId }) {
   const redoBtn = h('button', { class: 'icon-btn', title: 'Redo', onclick: redo }, icon('redo'));
   const tl = h('canvas', { class: 'tl' });
   const selInfo = h('div', { class: 'sel-info muted small' });
-  const actions = h('div', { class: 'sel-actions' },
-    h('button', { class: 'btn danger-soft', onclick: cutSel }, icon('scissors', 18), 'Cut video + voice'),
-    h('button', { class: 'btn', onclick: () => gainSel('voice', 0, 'Voice removed in this part (video stays)') }, icon('mute', 18), 'Delete voice only'),
-    h('button', {
-      class: 'btn', onclick: async () => {
-        if (!requireSel()) return;
-        const g = await askVolume('Voice volume for selected part', 150);
-        if (g != null) gainSel('voice', g, `Voice set to ${Math.round(g * 100)}% here`);
-      },
-    }, icon('volume', 18), 'Voice volume'),
-    h('button', {
-      class: 'btn', onclick: async () => {
-        if (!requireSel()) return;
-        if (!edl.music) return toast('Add music first (below)');
-        const g = await askVolume('Music volume for selected part', 50);
-        if (g != null) gainSel('music', g, `Music set to ${Math.round(g * 100)}% here`);
-      },
-    }, icon('music', 18), 'Music volume'));
+  const trackBtns = TRACKS.map(([id, ic, label]) => h('button', {
+    class: `track-btn track-${id}`, style: { top: `${LANES[id][0]}px`, height: `${LANES[id][1]}px` },
+    onclick: () => {
+      if (selTracks.has(id) && selTracks.size === 1) return;
+      if (selTracks.has(id)) selTracks.delete(id); else selTracks.add(id);
+      if (id === 'music' && !edl.music && selTracks.has('music')) toast('No music yet — add it in “Sound mix” below');
+      renderSel(); drawTL();
+    },
+  }, icon(ic, 20), h('span', null, label)));
+  const scissorsBtn = h('button', { class: 'tool-big', onclick: scissors }, icon('scissors', 26), h('span', null, 'Cut here'));
+  const deleteBtn = h('button', { class: 'tool-big danger', onclick: deleteSel }, icon('trash', 26), h('span', null, 'Delete'));
+  const volumeBtn = h('button', { class: 'tool-big', onclick: volumeSel }, icon('volume', 26), h('span', null, 'Volume'));
+  const undoBig = h('button', { class: 'tool-big', onclick: undo }, icon('undo', 26), h('span', null, 'Undo'));
+  const redoBig = h('button', { class: 'tool-big', onclick: redo }, icon('redo', 26), h('span', null, 'Redo'));
+  const actions = h('div', { class: 'tool-row' }, undoBig, scissorsBtn, deleteBtn, volumeBtn, redoBig);
   const mixCard = h('section', { class: 'card' });
   const fxCard = h('section', { class: 'card' });
   const editsCard = h('section', { class: 'card' });
@@ -249,19 +281,17 @@ export async function editorScreen(root, { recId }) {
           playBtn, timeEl, h('span', { class: 'grow' }), undoBtn, redoBtn)),
       h('div', { class: 'ed-right' },
         h('section', { class: 'card tl-card' },
-          h('div', { class: 'tl-wrap' }, tl),
+          h('div', { class: 'tl-wrap' }, h('div', { class: 'tl-tracks' }, trackBtns), tl),
           h('div', { class: 'tl-tools' },
             h('button', { class: 'icon-btn', title: 'Zoom out', onclick: () => zoom(1 / 1.6) }, icon('zout', 20)),
             h('button', { class: 'icon-btn', title: 'Zoom in', onclick: () => zoom(1.6) }, icon('zin', 20)),
-            h('button', { class: 'btn small ghost', onclick: () => { pps = fitPps(); scrollX = 0; drawTL(); } }, 'Fit'),
+            h('button', { class: 'btn small ghost', onclick: () => { pps = fitPps(); scrollX = 0; fitted = true; drawTL(); } }, 'Fit'),
             h('span', { class: 'grow' }),
-            h('span', { class: 'muted small hint' }, 'Tap = jump · Long-press + drag = select')),
+            h('span', { class: 'muted small hint' }, 'Tap = jump · drag = scroll')),
+          actions,
           h('div', { class: 'sel-bar' },
-            h('button', { class: 'btn small', onclick: markIn }, '[ Mark In'),
-            h('button', { class: 'btn small', onclick: markOut }, 'Mark Out ]'),
-            h('button', { class: 'btn small ghost', onclick: () => { sel = null; renderSel(); drawTL(); } }, 'Clear'),
-            selInfo),
-          actions),
+            selInfo,
+            h('button', { class: 'btn small ghost', onclick: () => { sel = null; markA = null; renderSel(); drawTL(); } }, 'Clear'))),
         fxCard,
         mixCard,
         editsCard,
@@ -284,6 +314,8 @@ export async function editorScreen(root, { recId }) {
     timeEl.textContent = `${fmt(T, true)} / ${fmt(M.outD, true)}`;
     undoBtn.disabled = !undoStack.length;
     redoBtn.disabled = !redoStack.length;
+    undoBig.disabled = !undoStack.length;
+    redoBig.disabled = !redoStack.length;
   }
 
   async function fullPreview() {
@@ -297,18 +329,19 @@ export async function editorScreen(root, { recId }) {
   }
 
   // ---------- selection ----------
-  function markIn() {
-    sel = { a: T, b: sel && sel.b > T + 0.05 ? sel.b : Math.min(M.outD, T + 3) };
-    renderSel(); drawTL();
-  }
-  function markOut() {
-    sel = { a: sel && sel.a < T - 0.05 ? sel.a : Math.max(0, T - 3), b: T };
-    if (sel.b - sel.a < 0.05) sel = null;
-    renderSel(); drawTL();
-  }
   function renderSel() {
-    actions.classList.toggle('disabled', !sel);
-    selInfo.textContent = sel ? `Selected ${fmt(sel.a, true)} → ${fmt(sel.b, true)} (${(sel.b - sel.a).toFixed(1)}s)` : 'Nothing selected';
+    trackBtns.forEach((b, i) => b.classList.toggle('on', selTracks.has(TRACKS[i][0])));
+    scissorsBtn.classList.toggle('armed', markA != null);
+    scissorsBtn.lastChild.textContent = markA != null ? 'Cut end' : 'Cut here';
+    deleteBtn.disabled = !sel;
+    volumeBtn.disabled = !sel || (selTracks.size === 1 && selTracks.has('video'));
+    undoBig.disabled = !undoStack.length;
+    redoBig.disabled = !redoStack.length;
+    const names = TRACKS.filter(([id]) => selTracks.has(id)).map(([, , l]) => l).join(' + ');
+    const what = selTracks.has('video') ? 'Video (voice & music move with it)' : names;
+    selInfo.textContent = sel
+      ? `${what}: ${fmt(sel.a, true)} → ${fmt(sel.b, true)} (${(sel.b - sel.a).toFixed(1)}s)`
+      : markA != null ? `✂ start at ${fmt(markA, true)} — now go to the end` : `Working on: ${what}`;
   }
 
   // ---------- mix panel ----------
@@ -466,7 +499,7 @@ export async function editorScreen(root, { recId }) {
 
   // ---------- timeline ----------
   const tctx = tl.getContext('2d');
-  let tlW = 300, dpr = 1, pps = 0, scrollX = 0;
+  let tlW = 300, dpr = 1, pps = 0, scrollX = 0, fitted = true;
   const X = (t) => PAD + t * pps - scrollX;
   const Tx = (x) => (x - PAD + scrollX) / pps;
   const fitPps = () => Math.max(1, (tlW - PAD * 2) / Math.max(1, M.outD));
@@ -477,6 +510,7 @@ export async function editorScreen(root, { recId }) {
   function zoom(k) {
     const center = Tx(tlW / 2);
     pps = clamp(pps * k, fitPps(), 600);
+    fitted = pps <= fitPps() + 1e-6;
     scrollX = PAD + center * pps - tlW / 2;
     clampScroll();
     drawTL();
@@ -509,8 +543,9 @@ export async function editorScreen(root, { recId }) {
     const x0 = Math.max(0, X(0)), x1 = Math.min(tlW, X(M.outD));
     for (const k of ['video', 'voice', 'music']) {
       const [y, hh] = LANES[k];
-      c.fillStyle = C.lane;
+      c.fillStyle = selTracks.has(k) ? '#2a231c' : C.lane;
       c.fillRect(x0, y, Math.max(0, x1 - x0), hh);
+      if (selTracks.has(k)) { c.strokeStyle = 'rgba(211,155,71,.45)'; c.lineWidth = 1; c.strokeRect(0.5, y + 0.5, tlW - 1, hh - 1); }
     }
     // ruler
     const steps = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
@@ -619,7 +654,8 @@ export async function editorScreen(root, { recId }) {
     if (sel) {
       const xa = X(sel.a), xb = X(sel.b);
       c.fillStyle = C.sel;
-      c.fillRect(xa, 20, xb - xa, TL_H - 24);
+      const lanes = selTracks.has('video') ? ['video', 'voice', 'music'] : [...selTracks];
+      for (const k of lanes) c.fillRect(xa, LANES[k][0], xb - xa, LANES[k][1]);
       c.strokeStyle = C.selEdge;
       c.lineWidth = 2;
       for (const x of [xa, xb]) {
@@ -628,6 +664,13 @@ export async function editorScreen(root, { recId }) {
         c.beginPath(); c.arc(x, TL_H - 10, 7, 0, Math.PI * 2); c.fill();
       }
     }
+    if (markA != null) {
+      const x = X(markA);
+      c.strokeStyle = C.selEdge; c.lineWidth = 2; c.setLineDash([6, 4]);
+      c.beginPath(); c.moveTo(x, 20); c.lineTo(x, TL_H); c.stroke(); c.setLineDash([]);
+      c.fillStyle = C.selEdge; c.font = '700 11px Manrope, system-ui, sans-serif'; c.textBaseline = 'top';
+      c.fillText('✂', x + 4, 2);
+    }
     // playhead
     const px = X(T);
     c.strokeStyle = C.head;
@@ -635,16 +678,6 @@ export async function editorScreen(root, { recId }) {
     c.lineWidth = 2;
     c.beginPath(); c.moveTo(px, 4); c.lineTo(px, TL_H); c.stroke();
     c.beginPath(); c.moveTo(px - 6, 0); c.lineTo(px + 6, 0); c.lineTo(px, 8); c.fill();
-    // lane labels
-    c.font = '700 9px Manrope, system-ui, sans-serif';
-    c.textBaseline = 'middle';
-    for (const [k, txt] of [['video', 'VIDEO'], ['voice', 'VOICE'], ['music', 'MUSIC']]) {
-      const [y] = LANES[k];
-      c.fillStyle = C.label;
-      c.fillRect(2, y + 2, 42, 14);
-      c.fillStyle = '#b9ab95';
-      c.fillText(txt, 6, y + 9);
-    }
   }
 
   // timeline touch: tap = seek, drag = scroll, long-press+drag = select, drag handles = adjust
@@ -717,9 +750,8 @@ export async function editorScreen(root, { recId }) {
     if (e.target.closest('input,textarea')) return;
     if (e.key === ' ') { e.preventDefault(); playing ? pause() : play(); }
     else if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
-    else if (e.key === 'i') markIn();
-    else if (e.key === 'o') markOut();
-    else if (e.key === 'Delete' || e.key === 'Backspace') cutSel();
+    else if (e.key === 'c') scissors();
+    else if (e.key === 'Delete' || e.key === 'Backspace') deleteSel();
   }
   window.addEventListener('keydown', onKey);
 
