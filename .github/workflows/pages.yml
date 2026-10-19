@@ -1,22 +1,22 @@
-name: Publish app to gh-pages
+name: Publish app
 
-# Copies the app to the gh-pages branch, which GitHub Pages serves at
-# https://<user>.github.io/Heathapp/
+# Works with either Pages setting:
+#  - Source "GitHub Actions": the deploy job publishes the site.
+#  - Source "Deploy from a branch: gh-pages": the gh-pages job updates that branch.
 on:
   push:
     branches: [main, claude/mobile-video-recording-editor-v4k8ae]
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  publish:
+  gh-pages:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Push site to gh-pages
@@ -29,3 +29,22 @@ jobs:
           git add -A
           git commit -m "Publish ${GITHUB_SHA::7}"
           git push -f origin gh-pages-tmp:gh-pages
+
+  deploy:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
