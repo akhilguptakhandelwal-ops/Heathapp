@@ -30,6 +30,7 @@ export const r2 = (v) => Math.round(v * 100) / 100;
 export function fmt(sec, tenths = false) {
   if (!isFinite(sec)) sec = 0;
   sec = Math.max(0, sec);
+  if (!tenths) sec = Math.round(sec);
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
   let out = `${m}:${String(s).padStart(2, '0')}`;
@@ -126,13 +127,13 @@ export async function prepareImage(file, max = 2560) {
   return { blob, w: cw, h: ch };
 }
 
-export async function enterImmersive() {
+export async function enterImmersive(orientation = 'landscape') {
   try {
     if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
       await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
     }
   } catch { /* not allowed here, fine */ }
-  try { await screen.orientation?.lock?.('landscape'); } catch { /* iOS etc. */ }
+  try { await screen.orientation?.lock?.(orientation); } catch { /* iOS etc. */ }
 }
 
 export async function exitImmersive() {

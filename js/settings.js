@@ -2,7 +2,8 @@
 const KEY = 'slidevox.settings';
 
 const defaults = {
-  res: '1080',          // '1080' | '720'
+  swipe: true,          // swipe on the stage to change image
+  exportPreset: 'high',
   bg: '#0e0c0a',        // letterbox colour behind images
   countdown: true,      // 3-2-1 before recording
   scriptSpeed: 6,       // 1..20
@@ -25,6 +26,7 @@ export const settings = new Proxy(data, {
   },
 });
 
-export function stageSize() {
-  return settings.res === '720' ? { w: 1280, h: 720 } : { w: 1920, h: 1080 };
+// Recording canvas. Export can be any size; drawings are scaled.
+export function stageSize(aspect = '16:9') {
+  return aspect === '9:16' ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
 }

@@ -1,4 +1,5 @@
-import { h, uid, promptBox, confirmBox, modal, toast } from './util.js';
+import { h, uid, promptBox, confirmBox, modal, toast, pickFiles, fmt } from './util.js';
+import { importClip } from './media.js';
 import { icon } from './icons.js';
 import { db, deleteProject } from './db.js';
 import { settings } from './settings.js';
@@ -32,7 +33,7 @@ export async function homeScreen(root) {
         thumb,
         h('div', { class: 'proj-meta' },
           h('div', { class: 'proj-name' }, p.name),
-          h('div', { class: 'muted small' }, `${p.slides.length} images · ${recs.length} takes · ${new Date(p.updated || p.created).toLocaleDateString()}`)),
+          h('div', { class: 'muted small' }, `${p.slides.length} items · ${recs.length} takes · ${new Date(p.updated || p.created).toLocaleDateString()}`)),
         h('button', {
           class: 'icon-btn ghost', title: 'Delete project',
           onclick: async (e) => {
@@ -61,8 +62,8 @@ export async function homeScreen(root) {
     modal({
       title: 'Settings',
       body: h('div', { class: 'form' },
-        h('label', null, 'Video quality'),
-        seg('res', [['1080', '1080p (Full HD)'], ['720', '720p (smaller file)']]),
+        h('label', null, 'Swipe on the image to go next / previous'),
+        seg('swipe', [[true, 'On'], [false, 'Off']]),
         h('label', null, 'Background behind images'),
         seg('bg', [['#0e0c0a', 'Charcoal'], ['#ffffff', 'White'], ['#f3ede2', 'Paper'], ['#1f2a24', 'Forest']]),
         h('label', null, '3-2-1 countdown before recording'),
@@ -70,6 +71,57 @@ export async function homeScreen(root) {
         h('p', { class: 'muted small' }, 'Tip: open this page in Chrome (Android) or Safari (iPhone) and use “Add to Home screen” to install it like an app.')),
       buttons: [{ label: 'Done', kind: 'primary', value: true }],
     });
+  }
+
+  // Intro / outro clips that are added to every export.
+  const libList = h('div', { class: 'item-list' });
+  async function renderLibrary() {
+    const items = (await db.all('library')).sort((a, b) => a.created - b.created);
+    libList.innerHTML = '';
+    if (!items.length) {
+      libList.append(h('p', { class: 'muted small' }, 'Save a short clip once (for example your channel intro or a “subscribe” ending). Mark it Start or End and it is added to every video you export.'));
+      return;
+    }
+    for (const it of items) {
+      const blob = await db.getBlob(it.imageId);
+      const u = blob ? URL.createObjectURL(blob) : '';
+      if (u) urls.push(u);
+      const seg = h('div', { class: 'seg mini' }, [['start', 'Start'], ['end', 'End'], ['off', 'Off']].map(([v, label]) =>
+        h('button', {
+          class: it.pos === v ? 'on' : '',
+          onclick: async () => { it.pos = v; await db.put('library', it); renderLibrary(); },
+        }, label)));
+      libList.append(h('div', { class: 'item-row lib-row' },
+        h('div', { class: 'item-thumb' }, u && h('img', { src: u, alt: '' }), h('span', { class: 'item-badge' }, icon(it.kind === 'video' ? 'film' : 'music', 14))),
+        h('div', { class: 'item-meta' },
+          h('div', { class: 'item-name' }, it.name),
+          h('div', { class: 'muted small' }, `${fmt(it.dur)} · ${it.pos === 'start' ? 'always first' : it.pos === 'end' ? 'always last' : 'not used'}`),
+          seg),
+        h('button', {
+          class: 'icon-btn ghost', title: 'Delete',
+          onclick: async () => {
+            if (!(await confirmBox(`Delete “${it.name}”?`))) return;
+            await db.delBlob(it.blobId); await db.delBlob(it.imageId); await db.del('library', it.id);
+            renderLibrary();
+          },
+        }, icon('trash', 18))));
+    }
+  }
+  async function addLibraryClip() {
+    const [f] = await pickFiles('video/*,audio/*');
+    if (!f) return;
+    toast('Saving clip…', 6000);
+    try {
+      const item = await importClip(f);
+      item.pos = (await db.all('library')).some((l) => l.pos === 'end') ? 'start' : 'end';
+      item.created = Date.now();
+      await db.put('library', item);
+      toast(`Saved — it will play at the ${item.pos === 'end' ? 'end' : 'start'} of every video`, 3500);
+    } catch (e) {
+      console.error(e);
+      toast(`Could not open ${f.name}`, 3500);
+    }
+    renderLibrary();
   }
 
   root.append(h('div', { class: 'page' },
@@ -82,9 +134,15 @@ export async function homeScreen(root) {
         h('p', { class: 'muted' }, 'Add images → paste your script → record voice while you zoom, tick and circle → cut, add music, export.')),
       h('button', { class: 'btn primary big', onclick: newProject }, icon('plus'), 'New project'),
       h('h2', { class: 'section-title' }, 'Your projects'),
-      list)));
+      list,
+      h('section', { class: 'card' },
+        h('div', { class: 'card-head' },
+          h('h2', null, icon('film', 18), 'Intro & outro'),
+          h('span', { class: 'muted small' }, 'added to every video'),
+          h('button', { class: 'btn small', onclick: addLibraryClip }, icon('plus', 16), 'Add clip')),
+        libList))));
 
   await render();
-  if (new URLSearchParams(location.search).has('welcome')) toast('Welcome!');
+  await renderLibrary();
   return () => urls.forEach((u) => URL.revokeObjectURL(u));
 }

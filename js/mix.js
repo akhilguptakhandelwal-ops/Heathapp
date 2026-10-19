@@ -136,16 +136,16 @@ export function rangeGain(gains, track, s) {
 }
 
 // Gain curves over output time, sampled `rate` times per second.
-export function computeCurves(M, edl, va, hasMusic, T0, rate = 50) {
+export function computeCurves(M, edl, va, hasMusic, T0, rate = 50, Tend = M.outD) {
   const T1 = M.outD;
-  const n = Math.max(2, Math.ceil((T1 - T0) * rate) + 1);
+  const n = Math.max(2, Math.ceil((Tend - T0) * rate) + 1);
   const v = new Float32Array(n), m = new Float32Array(n);
   const music = edl.music;
   const atk = 1 - Math.exp(-1 / (rate * 0.08));
   const rel = 1 - Math.exp(-1 / (rate * 0.45));
   let duck = null;
   for (let k = 0; k < n; k++) {
-    const T = Math.min(T1, T0 + k / rate);
+    const T = Math.min(Tend, T0 + k / rate);
     const s = M.toSrc(T);
     let vg = edl.voiceVol * rangeGain(edl.gains, 'voice', s);
     const speaking = va.active[Math.floor(s * va.rate)] === 1 && vg > 0.02;
@@ -169,10 +169,11 @@ export function computeCurves(M, edl, va, hasMusic, T0, rate = 50) {
   return { v, m, rate, n };
 }
 
-// Schedules voice + music from output time T0 into `dest`. Used for both
-// preview (speakers) and export (MediaStream).
-export function startMix(ctx, dest, M, parts, musicBuf, edl, va, T0) {
-  const when0 = ctx.currentTime + 0.15;
+// Schedules voice + music for take time T0..T1 into `dest`, starting at
+// context time `at`. Used for preview (speakers) and export.
+export function startMix(ctx, dest, M, parts, musicBuf, edl, va, T0, opts = {}) {
+  const when0 = opts.at ?? ctx.currentTime + 0.15;
+  const T1 = Math.min(opts.T1 ?? M.outD, M.outD);
   const master = ctx.createGain();
   const limiter = ctx.createDynamicsCompressor();
   limiter.threshold.value = -2;
@@ -184,7 +185,7 @@ export function startMix(ctx, dest, M, parts, musicBuf, edl, va, T0) {
   limiter.connect(dest);
 
   const hasMusic = !!(musicBuf && edl.music);
-  const curves = computeCurves(M, edl, va, hasMusic, T0);
+  const curves = computeCurves(M, edl, va, hasMusic, T0, 50, T1);
   const span = (curves.n - 1) / curves.rate;
   const vGain = ctx.createGain();
   const mGain = ctx.createGain();
@@ -202,12 +203,13 @@ export function startMix(ctx, dest, M, parts, musicBuf, edl, va, T0) {
   const sources = [];
   for (const seg of M.segs) {
     const segLen = seg.b - seg.a;
-    if (seg.o + segLen <= T0) continue;
+    if (seg.o + segLen <= T0 || seg.o >= T1) continue;
     const startOut = Math.max(seg.o, T0);
     const srcStart = seg.a + startOut - seg.o;
+    const srcEnd = Math.min(seg.b, seg.a + T1 - seg.o);
     for (const part of parts) {
       const pa = part.start, pb = pa + part.buf.duration;
-      const ia = Math.max(srcStart, pa), ib = Math.min(seg.b, pb);
+      const ia = Math.max(srcStart, pa), ib = Math.min(srcEnd, pb);
       if (ib - ia < 0.005) continue;
       const node = ctx.createBufferSource();
       node.buffer = part.buf;
@@ -222,13 +224,13 @@ export function startMix(ctx, dest, M, parts, musicBuf, edl, va, T0) {
     const mStart = Math.max(T0, ms);
     const off = mStart - ms;
     const loop = edl.music.loop !== false;
-    if (mStart < M.outD && (loop || off < musicBuf.duration)) {
+    if (mStart < T1 && (loop || off < musicBuf.duration)) {
       const node = ctx.createBufferSource();
       node.buffer = musicBuf;
       node.loop = loop;
       node.connect(mGain);
       node.start(when0 + mStart - T0, loop ? off % musicBuf.duration : off);
-      node.stop(when0 + M.outD - T0 + 0.05);
+      node.stop(when0 + T1 - T0 + 0.02);
       sources.push(node);
     }
   }

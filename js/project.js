@@ -1,19 +1,92 @@
 import { h, uid, debounce, promptBox, confirmBox, pickFiles, prepareImage, toast, fmt, enterImmersive } from './util.js';
 import { icon } from './icons.js';
-import { db, imagesUsedBy, deleteRecording } from './db.js';
+import { db, blobsUsedBy, deleteRecording } from './db.js';
+import { importClip } from './media.js';
+
+// Drag rows by their handle to reorder. Works with touch and mouse.
+export function makeSortable(list, onMove) {
+  list.addEventListener('pointerdown', (e) => {
+    const handle = e.target.closest('.drag-handle');
+    if (!handle) return;
+    e.preventDefault();
+    const row = handle.closest('.item-row');
+    const rows = [...list.querySelectorAll('.item-row')];
+    const from = rows.indexOf(row);
+    const rects = rows.map((r) => r.getBoundingClientRect());
+    const startY = e.clientY;
+    const startScroll = window.scrollY;
+    let to = from;
+    row.classList.add('dragging');
+    navigator.vibrate?.(10);
+    try { handle.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+    let scrollTimer = null;
+
+    const update = (clientY) => {
+      const dy = clientY - startY + (window.scrollY - startScroll);
+      row.style.transform = `translateY(${dy}px)`;
+      const y = rects[from].top + rects[from].height / 2 + dy;
+      to = from;
+      for (let i = 0; i < rects.length; i++) {
+        const mid = rects[i].top + rects[i].height / 2;
+        if (i < from && y < mid) { to = i; break; }
+        if (i > from && y > mid) to = i;
+      }
+      const hgt = rects[from].height + 8;
+      rows.forEach((r, i) => {
+        if (r === row) return;
+        let shift = 0;
+        if (from < to && i > from && i <= to) shift = -hgt;
+        if (from > to && i >= to && i < from) shift = hgt;
+        r.style.transform = shift ? `translateY(${shift}px)` : '';
+      });
+    };
+    let lastY = e.clientY;
+    const move = (ev) => {
+      lastY = ev.clientY;
+      update(lastY);
+      clearInterval(scrollTimer);
+      const edge = 70;
+      if (ev.clientY < edge || ev.clientY > window.innerHeight - edge) {
+        const dir = ev.clientY < edge ? -1 : 1;
+        scrollTimer = setInterval(() => { window.scrollBy(0, dir * 10); update(lastY); }, 16);
+      }
+    };
+    const up = () => {
+      clearInterval(scrollTimer);
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+      rows.forEach((r) => { r.style.transform = ''; });
+      row.classList.remove('dragging');
+      if (to !== from) onMove(from, to);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  });
+}
+
+const KIND_LABEL = { image: 'Image', video: 'Video clip', audio: 'Audio clip' };
 
 export async function projectScreen(root, { projectId }) {
   const p = await db.get('projects', projectId);
   if (!p) { location.hash = '#/'; return null; }
+  p.aspect ||= '16:9';
   const urls = new Map();
   const saveNow = () => { p.updated = Date.now(); return db.put('projects', p); };
   const save = debounce(saveNow, 400);
 
   const title = h('button', { class: 'title-btn', onclick: rename }, p.name, icon('edit', 16));
-  const grid = h('div', { class: 'slide-grid' });
+  const list = h('div', { class: 'item-list' });
   const recList = h('div', { class: 'rec-list' });
   const countEl = h('span', { class: 'muted small' });
   const cta = h('button', { class: 'btn record big', onclick: startRecording }, icon('mic'), 'Create video & record voice');
+  makeSortable(list, (from, to) => {
+    const [s] = p.slides.splice(from, 1);
+    p.slides.splice(to, 0, s);
+    save();
+    renderItems();
+  });
 
   async function rename() {
     const n = await promptBox('Rename project', p.name);
@@ -28,43 +101,42 @@ export async function projectScreen(root, { projectId }) {
     return u;
   }
 
-  async function renderSlides() {
-    grid.innerHTML = '';
-    countEl.textContent = p.slides.length ? `${p.slides.length} images` : '';
+  async function renderItems() {
+    list.innerHTML = '';
+    const imgs = p.slides.filter((s) => (s.kind || 'image') === 'image').length;
+    const clips = p.slides.length - imgs;
+    countEl.textContent = p.slides.length ? `${imgs} images${clips ? ` · ${clips} clips` : ''}` : '';
     cta.disabled = !p.slides.length;
     if (!p.slides.length) {
-      grid.append(h('button', { class: 'add-tile', onclick: addImages }, icon('plus', 28), h('span', null, 'Add images')));
+      list.append(h('div', { class: 'empty small-empty' }, icon('image', 30), h('p', { class: 'muted' }, 'Add images, then drag ☰ to arrange the order.')));
       return;
     }
     for (let i = 0; i < p.slides.length; i++) {
       const s = p.slides[i];
-      const img = h('img', { src: await urlFor(s.imageId), alt: `Image ${i + 1}`, style: { transform: `rotate(${(s.rot || 0) * 90}deg)` } });
-      grid.append(h('div', { class: 'slide-tile' },
-        h('div', { class: 'slide-img' }, img),
-        h('span', { class: 'slide-no' }, String(i + 1)),
-        h('div', { class: 'slide-tools' },
-          h('button', { title: 'Move left', disabled: i === 0, onclick: () => move(i, -1) }, icon('left', 18)),
-          h('button', { title: 'Rotate', onclick: () => { s.rot = ((s.rot || 0) + 1) % 4; save(); renderSlides(); } }, icon('rotate', 18)),
-          h('button', { title: 'Delete', onclick: () => removeSlide(i) }, icon('trash', 18)),
-          h('button', { title: 'Move right', disabled: i === p.slides.length - 1, onclick: () => move(i, 1) }, icon('right', 18)))));
+      const kind = s.kind || 'image';
+      const img = h('img', { src: await urlFor(s.imageId), alt: '', style: { transform: `rotate(${(s.rot || 0) * 90}deg)` } });
+      list.append(h('div', { class: `item-row kind-${kind}` },
+        h('button', { class: 'drag-handle', title: 'Drag to reorder', 'aria-label': 'Drag to reorder' }, icon('grip', 22)),
+        h('span', { class: 'item-no' }, String(i + 1)),
+        h('div', { class: 'item-thumb' }, img, kind !== 'image' && h('span', { class: 'item-badge' }, icon(kind === 'video' ? 'film' : 'music', 14))),
+        h('div', { class: 'item-meta' },
+          h('div', { class: 'item-name' }, s.name || `Image ${i + 1}`),
+          h('div', { class: 'muted small' }, kind === 'image' ? `${s.w}×${s.h}` : `${KIND_LABEL[kind]} · ${fmt(s.dur)}`)),
+        kind === 'image' && h('button', { class: 'icon-btn ghost', title: 'Rotate', onclick: () => { s.rot = ((s.rot || 0) + 1) % 4; save(); renderItems(); } }, icon('rotate', 18)),
+        h('button', { class: 'icon-btn ghost', title: 'Delete', onclick: () => removeItem(i) }, icon('trash', 18))));
     }
-    grid.append(h('button', { class: 'add-tile', onclick: addImages }, icon('plus', 28), h('span', null, 'Add more')));
   }
 
-  function move(i, d) {
-    const [s] = p.slides.splice(i, 1);
-    p.slides.splice(i + d, 0, s);
-    save();
-    renderSlides();
-  }
-
-  async function removeSlide(i) {
-    if (!(await confirmBox(`Remove image ${i + 1}?`, 'Remove'))) return;
+  async function removeItem(i) {
+    if (!(await confirmBox(`Remove item ${i + 1}?`, 'Remove'))) return;
     const [s] = p.slides.splice(i, 1);
     await saveNow();
     const recs = await db.byIndex('recordings', 'projectId', p.id);
-    if (!recs.some((r) => imagesUsedBy(r).has(s.imageId))) await db.delBlob(s.imageId);
-    renderSlides();
+    const used = new Set();
+    recs.forEach((r) => blobsUsedBy(r).forEach((id) => used.add(id)));
+    if (!used.has(s.imageId)) await db.delBlob(s.imageId);
+    if (s.blobId && !used.has(s.blobId)) await db.delBlob(s.blobId);
+    renderItems();
   }
 
   async function addImages() {
@@ -76,7 +148,7 @@ export async function projectScreen(root, { projectId }) {
       try {
         const img = await prepareImage(f);
         const imageId = await db.putBlob(img.blob);
-        p.slides.push({ id: uid(), imageId, w: img.w, h: img.h, rot: 0, name: f.name });
+        p.slides.push({ id: uid(), kind: 'image', imageId, w: img.w, h: img.h, rot: 0, name: f.name });
         added++;
       } catch (e) {
         console.error(e);
@@ -85,13 +157,32 @@ export async function projectScreen(root, { projectId }) {
     }
     await saveNow();
     toast(`${added} image${added === 1 ? '' : 's'} added`);
-    renderSlides();
+    renderItems();
+  }
+
+  async function addClips() {
+    const files = await pickFiles('video/*,audio/*', true);
+    if (!files.length) return;
+    toast('Adding clip…', 8000);
+    let added = 0;
+    for (const f of files) {
+      try {
+        p.slides.push(await importClip(f));
+        added++;
+      } catch (e) {
+        console.error(e);
+        toast(`Could not open ${f.name}`, 3500);
+      }
+    }
+    await saveNow();
+    if (added) toast(`${added} clip${added === 1 ? '' : 's'} added — drag ☰ to place it`, 3500);
+    renderItems();
   }
 
   function sortByName() {
     p.slides.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true }));
     save();
-    renderSlides();
+    renderItems();
     toast('Sorted by file name');
   }
 
@@ -124,6 +215,15 @@ export async function projectScreen(root, { projectId }) {
       }, icon('paste', 16), 'Paste')),
     scriptArea);
 
+  const aspectSeg = h('div', { class: 'seg' }, [['16:9', 'Landscape 16:9 (YouTube)'], ['9:16', 'Portrait 9:16 (Shorts / Reels)']].map(([v, label]) =>
+    h('button', {
+      class: p.aspect === v ? 'on' : '',
+      onclick: (e) => {
+        p.aspect = v; save();
+        [...aspectSeg.children].forEach((b) => b.classList.toggle('on', b === e.currentTarget));
+      },
+    }, label)));
+
   async function renderRecs() {
     const recs = (await db.byIndex('recordings', 'projectId', p.id)).sort((a, b) => b.created - a.created);
     recList.innerHTML = '';
@@ -136,7 +236,7 @@ export async function projectScreen(root, { projectId }) {
         h('span', { class: 'rec-ic' }, icon('film', 20)),
         h('div', { class: 'grow' },
           h('div', { class: 'rec-name' }, r.name),
-          h('div', { class: 'muted small' }, `${fmt(r.duration)} · ${new Date(r.created).toLocaleString()}${r.exportId ? ' · exported' : ''}`)),
+          h('div', { class: 'muted small' }, `${fmt(r.duration)} · ${r.h > r.w ? '9:16' : '16:9'} · ${new Date(r.created).toLocaleString()}${r.exportId ? ' · exported' : ''}`)),
         h('button', { class: 'btn small' }, icon('edit', 16), 'Edit'),
         h('button', {
           class: 'icon-btn ghost', title: 'Delete take',
@@ -151,7 +251,7 @@ export async function projectScreen(root, { projectId }) {
   async function startRecording() {
     if (!p.slides.length) return toast('Add images first');
     await saveNow();
-    enterImmersive(); // must run inside the tap so the browser allows fullscreen
+    enterImmersive(p.aspect === '9:16' ? 'portrait' : 'landscape'); // must run inside the tap
     location.hash = `#/rec/${p.id}`;
   }
 
@@ -161,22 +261,30 @@ export async function projectScreen(root, { projectId }) {
       title,
       h('span', { class: 'grow' })),
     h('main', { class: 'content' },
-      h('div', { class: 'add-row' },
-        h('button', { class: 'btn', onclick: addImages }, icon('plus', 18), icon('image', 18), 'Add images'),
-        h('button', { class: 'btn', onclick: () => { scriptCard.scrollIntoView({ behavior: 'smooth' }); setTimeout(() => scriptArea.focus(), 300); } }, icon('plus', 18), icon('text', 18), 'Add script')),
+      h('div', { class: 'add-row three' },
+        h('button', { class: 'btn', onclick: addImages }, icon('image', 18), 'Images'),
+        h('button', { class: 'btn', onclick: addClips }, icon('film', 18), 'Video / audio'),
+        h('button', { class: 'btn', onclick: () => { scriptCard.scrollIntoView({ behavior: 'smooth' }); setTimeout(() => scriptArea.focus(), 300); } }, icon('text', 18), 'Script')),
       h('section', { class: 'card' },
         h('div', { class: 'card-head' },
-          h('h2', null, icon('image', 18), 'Images (in order)'),
+          h('h2', null, icon('image', 18), 'Sequence'),
           countEl,
           h('button', { class: 'btn small ghost', onclick: sortByName, title: 'Sort by file name' }, icon('sort', 16), 'Sort')),
-        grid),
+        list,
+        h('div', { class: 'btn-row' },
+          h('button', { class: 'btn small', onclick: addImages }, icon('plus', 16), 'Add images'),
+          h('button', { class: 'btn small', onclick: addClips }, icon('plus', 16), 'Add video / audio')),
+        h('p', { class: 'muted small hint-line' }, 'Hold ☰ and drag to change the order. Video/audio clips play in the final video at the point you swipe to them while recording.')),
       scriptCard,
+      h('section', { class: 'card' },
+        h('div', { class: 'card-head' }, h('h2', null, icon('fit', 18), 'Video shape')),
+        aspectSeg),
       cta,
       h('section', { class: 'card' },
         h('div', { class: 'card-head' }, h('h2', null, icon('film', 18), 'Takes')),
         recList))));
 
-  await renderSlides();
+  await renderItems();
   await renderRecs();
   return () => { save.flush(); urls.forEach((u) => u && URL.revokeObjectURL(u)); };
 }

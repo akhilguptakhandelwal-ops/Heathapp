@@ -3,7 +3,7 @@ import { h, toast, fmt, clamp, uid, r2, debounce, enterImmersive, exitImmersive,
 import { icon } from './icons.js';
 import { db } from './db.js';
 import { settings, stageSize } from './settings.js';
-import { Painter, Player, emptyState, applyEvent, viewMatrix, applyM, invertM, fitView, slideLite } from './renderer.js';
+import { Painter, Player, emptyState, applyEvent, viewMatrix, applyM, invertM, fitView, slideLite, isClip } from './renderer.js';
 import { defaultEdl, pickMime, AUDIO_MIMES } from './mix.js';
 
 const TOOLS = [
@@ -32,7 +32,8 @@ export async function recorderScreen(root, { projectId, appendId }) {
   if (!project) { location.hash = '#/'; return null; }
   if (!project.slides.length) { toast('Add images first'); location.hash = `#/p/${projectId}`; return null; }
   const appendRec = appendId ? await db.get('recordings', appendId) : null;
-  const { w: W, h: H } = appendRec ? { w: appendRec.w, h: appendRec.h } : stageSize();
+  const { w: W, h: H } = appendRec ? { w: appendRec.w, h: appendRec.h } : stageSize(project.aspect);
+  const vertical = H > W;
   const bg = appendRec?.bg || settings.bg;
   const rotOf = (id) => project.slides.find((s) => s.id === id)?.rot || 0;
   const saveProject = debounce(() => db.put('projects', project), 500);
@@ -54,7 +55,7 @@ export async function recorderScreen(root, { projectId, appendId }) {
   let tool = TOOLS.some((t) => t[0] === settings.tool) ? settings.tool : 'pen';
   let color = settings.color;
   let sizeIdx = settings.size;
-  let recording = false, paused = false, finishing = false, done = false;
+  let recording = false, paused = false, finishing = false, done = false, autoPaused = false;
   let t0 = 0, pausedTotal = 0, pauseStart = 0;
   let log = [];
   let dirty = true;
@@ -78,6 +79,7 @@ export async function recorderScreen(root, { projectId, appendId }) {
   // ---------- DOM ----------
   const canvas = h('canvas', { class: 'stage', width: W, height: H });
   const painter = new Painter(canvas, bg);
+  painter.cache.onload = () => { dirty = true; };
   const timerEl = h('div', { class: 'rec-timer' }, '0:00');
   const meterBar = h('div', { class: 'meter-fill' });
   const recBtn = h('button', { class: 'rec-btn', title: 'Record', onclick: () => (recording ? stopRec(true) : startRec()) }, icon('rec', 30));
@@ -89,11 +91,15 @@ export async function recorderScreen(root, { projectId, appendId }) {
   const colorBtn = h('button', { class: 'rail-btn', title: 'Colour & size', onclick: () => toggleFly(colorFly, colorBtn) }, h('span', { class: 'swatch' }));
   const scriptBtn = h('button', { class: 'rail-btn', title: 'Script on/off', onclick: () => script.setVisible(!script.visible) }, icon('text'));
   const countdownEl = h('div', { class: 'countdown hidden' });
-  const hint = h('div', { class: 'stage-hint' }, 'Two fingers: zoom & move · One finger: draw');
+  const hint = h('div', { class: 'stage-hint' }, 'Swipe ← → for next / previous · Two fingers: zoom · One finger: draw');
+  const clipNote = h('div', { class: 'clip-note hidden' });
+  const swipeBtn = h('button', { class: `fly-toggle ${settings.swipe ? 'on' : ''}`, onclick: () => { settings.swipe = !settings.swipe; swipeBtn.classList.toggle('on', settings.swipe); swipeBtn.lastChild.textContent = `Swipe to change image: ${settings.swipe ? 'ON' : 'OFF'}`; } },
+    icon('swipe', 18), h('span', null, `Swipe to change image: ${settings.swipe ? 'ON' : 'OFF'}`));
 
   const toolFly = h('div', { class: 'flyout hidden' },
     h('div', { class: 'fly-grid' }, TOOLS.map(([id, ic, label]) =>
-      h('button', { class: 'fly-item', 'data-tool': id, title: label, onclick: () => { setTool(id); closeFly(); } }, icon(ic, 24), h('span', null, label)))));
+      h('button', { class: 'fly-item', 'data-tool': id, title: label, onclick: () => { setTool(id); closeFly(); } }, icon(ic, 24), h('span', null, label)))),
+    swipeBtn);
   const colorFly = h('div', { class: 'flyout hidden' },
     h('div', { class: 'fly-colors' }, COLORS.map((c) =>
       h('button', { class: 'color-dot', 'data-color': c, style: { background: c }, title: c, onclick: () => { setColor(c); closeFly(); } }))),
@@ -101,7 +107,7 @@ export async function recorderScreen(root, { projectId, appendId }) {
       h('button', { class: 'size-dot', 'data-size': i, onclick: () => { setSize(i); closeFly(); } }, h('span', { style: { width: `${6 + i * 6}px`, height: `${6 + i * 6}px` } })))));
 
   const script = buildScript(project.script || '');
-  const stageWrap = h('div', { class: 'stage-wrap' }, canvas, script.el, countdownEl, hint);
+  const stageWrap = h('div', { class: 'stage-wrap' }, canvas, clipNote, script.el, countdownEl, hint);
 
   const leftRail = h('div', { class: 'rail rail-left' },
     h('button', { class: 'rail-btn', title: 'Back', onclick: leave }, icon('back')),
@@ -122,10 +128,10 @@ export async function recorderScreen(root, { projectId, appendId }) {
     scriptBtn);
 
   const rotateHint = h('div', { class: 'rotate-hint' },
-    icon('rotate', 40), h('p', null, 'Turn your phone sideways (landscape) for recording'),
+    icon('rotate', 40), h('p', null, vertical ? 'This is a 9:16 video — hold your phone upright (portrait)' : 'Turn your phone sideways (landscape) for recording'),
     h('button', { class: 'btn small', onclick: (e) => e.target.closest('.rotate-hint').classList.add('dismissed') }, 'Continue anyway'));
 
-  const screenEl = h('div', { class: 'rec-screen' }, leftRail, stageWrap, rightRail, toolFly, colorFly, rotateHint);
+  const screenEl = h('div', { class: `rec-screen ${vertical ? 'vertical' : ''}` }, leftRail, stageWrap, rightRail, toolFly, colorFly, rotateHint);
   root.append(screenEl);
   document.body.classList.add('no-scroll');
 
@@ -155,8 +161,13 @@ export async function recorderScreen(root, { projectId, appendId }) {
     if (!open) return;
     fly.classList.remove('hidden');
     const r = btn.getBoundingClientRect();
-    const fh = fly.offsetHeight;
-    fly.style.top = `${clamp(r.top + r.height / 2 - fh / 2, 8, window.innerHeight - fh - 8)}px`;
+    const fh = fly.offsetHeight, fw = fly.offsetWidth;
+    if (vertical) {
+      fly.style.top = `${Math.max(8, r.top - fh - 10)}px`;
+      fly.style.left = `${clamp(r.left + r.width / 2 - fw / 2, 8, window.innerWidth - fw - 8)}px`;
+    } else {
+      fly.style.top = `${clamp(r.top + r.height / 2 - fh / 2, 8, window.innerHeight - fh - 8)}px`;
+    }
   }
   function closeFly() { toolFly.classList.add('hidden'); colorFly.classList.add('hidden'); }
 
@@ -168,10 +179,28 @@ export async function recorderScreen(root, { projectId, appendId }) {
 
   function go(d) {
     const i = clamp(st.i + d, 0, st.slides.length - 1);
-    if (i === st.i) return;
+    if (i === st.i) { toast(d > 0 ? 'This is the last item' : 'This is the first item', 1200); return; }
     cancelGesture();
     emit({ k: 'slide', i, v: fitView(rotOf(st.slides[i].id)) });
     updateCounter();
+    syncClip();
+  }
+
+  // On a video/audio clip the voice recording pauses; the clip plays at this
+  // point in the final video. Swiping on resumes recording.
+  function syncClip() {
+    const sl = st.slides[st.i];
+    const clip = isClip(sl);
+    clipNote.classList.toggle('hidden', !clip);
+    if (clip) {
+      clipNote.innerHTML = '';
+      clipNote.append(icon(sl.kind === 'video' ? 'film' : 'music', 22),
+        h('div', null,
+          h('b', null, `${sl.kind === 'video' ? 'Video' : 'Audio'} clip · ${fmt(sl.dur)}`),
+          h('div', null, recording ? 'Recording paused. This clip will play here in the final video. Swipe → to continue.' : 'This clip will play here in the final video.')));
+    }
+    if (!recording) return;
+    if (clip && !paused) { togglePause(); autoPaused = true; } else if (!clip && autoPaused) { autoPaused = false; if (paused) togglePause(); }
   }
 
   function rotate() {
@@ -216,6 +245,14 @@ export async function recorderScreen(root, { projectId, appendId }) {
   const M = () => viewMatrix(W, H, st.slides[st.i], st.v);
   const toImg = (p) => rp(invertM(M(), p));
 
+  const isSwipe = (dx, dy, ms) => settings.swipe && Math.abs(dx) > W * 0.16 && Math.abs(dy) < Math.abs(dx) * 0.5 && ms < 450;
+
+  // Remove a stroke completely (also from the log) — used when it was a swipe.
+  function dropStroke(id) {
+    emit({ k: 'adel', id });
+    log = log.filter((ev) => ev.id !== id && ev.a?.id !== id);
+  }
+
   function cancelGesture() {
     if (g?.type === 'draw') emit({ k: 'adel', id: g.id });
     if (g?.type === 'laser') emit({ k: 'laser', p: null });
@@ -224,12 +261,13 @@ export async function recorderScreen(root, { projectId, appendId }) {
 
   function startPinch() {
     const [a, b] = [...ptrs.values()];
-    g = { type: 'pinch', d0: Math.max(10, dist(a, b)), v0: { ...st.v }, q: invertM(M(), mid(a, b)) };
+    g = { type: 'pinch', d0: Math.max(10, dist(a, b)), v0: { ...st.v }, q: invertM(M(), mid(a, b)), c0: mid(a, b), t0: performance.now(), c1: mid(a, b), d1: dist(a, b) };
   }
 
   function movePinch() {
     const [a, b] = [...ptrs.values()];
     const c = mid(a, b);
+    g.c1 = c; g.d1 = dist(a, b);
     const v = { s: clamp(g.v0.s * dist(a, b) / g.d0, 0.4, 14), x: 0, y: 0, r: g.v0.r };
     const p0 = applyM(viewMatrix(W, H, st.slides[st.i], v), g.q);
     v.x = c[0] - p0[0];
@@ -247,7 +285,7 @@ export async function recorderScreen(root, { projectId, appendId }) {
     if (ptrs.size > 2) return;
     const p = ptrs.get(e.pointerId);
     if (tool === 'move') {
-      g = { type: 'pan', last: p };
+      g = { type: 'pan', last: p, start: p, t0: performance.now(), v0: { ...st.v } };
     } else if (tool === 'laser') {
       g = { type: 'laser' };
       emit({ k: 'laser', p: toImg(p) });
@@ -257,7 +295,7 @@ export async function recorderScreen(root, { projectId, appendId }) {
       if (tool === 'hl') w *= 3.5;
       const id = uid();
       emit({ k: 'a+', a: { id, tool, color, w: Math.round(w * 100) / 100, pts: [toImg(p)] } });
-      g = { type: 'draw', id, start: p, moved: false, sc };
+      g = { type: 'draw', id, start: p, moved: false, sc, t0: performance.now(), last: p };
     }
   });
 
@@ -268,11 +306,12 @@ export async function recorderScreen(root, { projectId, appendId }) {
     if (g.type === 'pinch') { if (ptrs.size >= 2) movePinch(); return; }
     const p = toStage(e);
     if (g.type === 'pan') {
-      emit({ k: 'view', v: rv({ ...st.v, x: st.v.x + p[0] - g.last[0], y: st.v.y + p[1] - g.last[1] }) });
+      if (g.v0.s > 1.05 || !settings.swipe) emit({ k: 'view', v: rv({ ...st.v, x: st.v.x + p[0] - g.last[0], y: st.v.y + p[1] - g.last[1] }) });
       g.last = p;
     } else if (g.type === 'laser') {
       emit({ k: 'laser', p: toImg(p) });
     } else if (g.type === 'draw') {
+      g.last = p;
       if (!g.moved && dist(p, g.start) > 7) g.moved = true;
       if (!g.moved) return;
       if (SHAPES.has(tool)) emit({ k: 'a~', id: g.id, p: toImg(p) });
@@ -285,11 +324,36 @@ export async function recorderScreen(root, { projectId, appendId }) {
     ptrs.delete(e.pointerId);
     if (!g) return;
     if (g.type === 'pinch') {
-      if (ptrs.size < 2) g = { type: 'idle' };
+      if (ptrs.size < 2) {
+        // Two-finger flick (without zooming) also changes the image.
+        const dx = g.c1[0] - g.c0[0], dy = g.c1[1] - g.c0[1];
+        const ratio = g.d1 / g.d0;
+        if (ratio > 0.8 && ratio < 1.25 && isSwipe(dx, dy, performance.now() - g.t0 + 100)) {
+          emit({ k: 'view', v: g.v0 });
+          go(dx < 0 ? 1 : -1);
+        }
+        g = { type: 'idle' };
+      }
+    } else if (g.type === 'pan') {
+      const dx = g.last[0] - g.start[0], dy = g.last[1] - g.start[1];
+      // When not zoomed in, dragging sideways flips images like a photo gallery.
+      if (g.v0.s <= 1.05 && settings.swipe && Math.abs(dx) > W * 0.12 && Math.abs(dy) < Math.abs(dx)) {
+        emit({ k: 'view', v: g.v0 });
+        go(dx < 0 ? 1 : -1);
+      }
+      g = null;
     } else if (g.type === 'laser') {
       emit({ k: 'laser', p: null });
       g = null;
     } else if (g.type === 'draw') {
+      const dx = g.last[0] - g.start[0], dy = g.last[1] - g.start[1];
+      if (g.moved && isSwipe(dx, dy, performance.now() - g.t0) && tool !== 'circle' && tool !== 'rect') {
+        // A fast sideways flick = next / previous, not a drawing.
+        dropStroke(g.id);
+        g = null;
+        go(dx < 0 ? 1 : -1);
+        return;
+      }
       if (!g.moved && SHAPES.has(tool)) {
         if (tool === 'tick' || tool === 'cross') {
           // A tap stamps a ready-made tick / cross.
@@ -391,10 +455,12 @@ export async function recorderScreen(root, { projectId, appendId }) {
     recBtn.disabled = false;
     if (script.visible) script.play();
     syncUi();
+    syncClip();
   }
 
   function togglePause() {
     if (!recording) return;
+    autoPaused = false;
     if (!paused) {
       mr.pause();
       paused = true;
@@ -534,8 +600,9 @@ export async function recorderScreen(root, { projectId, appendId }) {
   }
 
   // ---------- main loop ----------
-  await painter.load(st.slides);
+  await painter.ensure(st);
   updateCounter();
+  syncClip();
   layout();
   let raf = 0, last = performance.now();
   const loop = (now) => {
@@ -550,7 +617,7 @@ export async function recorderScreen(root, { projectId, appendId }) {
       for (const v of meter.buf) s += v * v;
       const lvl = Math.min(1, Math.sqrt(s / meter.buf.length) * 4);
       meter.lvl = Math.max(lvl, meter.lvl * 0.9);
-      meterBar.style.transform = `scaleY(${meter.lvl.toFixed(3)})`;
+      meterBar.style.transform = `${vertical ? "scaleX" : "scaleY"}(${meter.lvl.toFixed(3)})`;
     }
     raf = requestAnimationFrame(loop);
   };
@@ -577,8 +644,8 @@ export async function recorderScreen(root, { projectId, appendId }) {
 }
 
 // Used by the editor's "continue recording" button.
-export function openRecorder(projectId, appendId) {
-  enterImmersive();
+export function openRecorder(projectId, appendId, orientation = 'landscape') {
+  enterImmersive(orientation);
   location.hash = appendId ? `#/rec/${projectId}/${appendId}` : `#/rec/${projectId}`;
 }
 

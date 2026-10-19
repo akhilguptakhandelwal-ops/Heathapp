@@ -44,6 +44,9 @@ const P = {
   paste: '<rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6"/>',
   sort: '<path d="M4 6h10M4 12h7M4 18h4M17 5v14M14 16l3 3 3-3"/>',
   check: '<path d="M5 12l5 5L19 7"/>',
+  grip: '<path d="M5 8h14M5 12h14M5 16h14"/>',
+  swipe: '<path d="M4 12h12M12 8l4 4-4 4"/><path d="M20 5v14"/>',
+  expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5M9 9l-5-5M15 9l5-5M9 15l-5 5M15 15l5 5"/>',
   folder: '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
 };
 

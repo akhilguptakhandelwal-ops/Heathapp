@@ -8,8 +8,12 @@ import { loadImage } from './util.js';
 const COS_SIN = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 
 export function slideLite(s) {
-  return { id: s.id, imageId: s.imageId, w: s.w, h: s.h };
+  const o = { id: s.id, imageId: s.imageId, w: s.w, h: s.h };
+  if (s.kind && s.kind !== 'image') Object.assign(o, { kind: s.kind, blobId: s.blobId, dur: s.dur, name: s.name });
+  return o;
 }
+
+export const isClip = (s) => !!s && (s.kind === 'video' || s.kind === 'audio');
 
 export function fitView(r = 0) {
   return { s: 1, x: 0, y: 0, r };
@@ -224,42 +228,95 @@ export function drawAnn(ctx, a) {
   ctx.restore();
 }
 
+// Keeps only a few decoded images in memory, so 50+ images are fine on a phone.
+export class ImageCache {
+  constructor(max = 8) {
+    this.max = max;
+    this.map = new Map();      // id -> bitmap
+    this.loading = new Map();  // id -> promise
+    this.onload = null;
+  }
+  peek(id) {
+    const b = this.map.get(id);
+    if (b) { this.map.delete(id); this.map.set(id, b); return b; }
+    this.get(id);
+    return null;
+  }
+  get(id) {
+    if (!id) return Promise.resolve(null);
+    if (this.map.has(id)) return Promise.resolve(this.peek(id));
+    if (this.loading.has(id)) return this.loading.get(id);
+    const p = (async () => {
+      try {
+        const blob = await db.getBlob(id);
+        if (!blob) return null;
+        const bmp = await loadImage(blob);
+        this.map.set(id, bmp);
+        while (this.map.size > this.max) {
+          const [oldId, old] = this.map.entries().next().value;
+          this.map.delete(oldId);
+          old.close?.();
+        }
+        this.onload?.(id);
+        return bmp;
+      } catch {
+        return null;
+      } finally {
+        this.loading.delete(id);
+      }
+    })();
+    this.loading.set(id, p);
+    return p;
+  }
+}
+
 export class Painter {
-  constructor(canvas, bg = '#0e0c0a', images = new Map()) {
+  // `size` is the recording size (layout space). The canvas may be bigger or
+  // smaller (export quality); everything is scaled to fit.
+  constructor(canvas, bg = '#0e0c0a', cache = new ImageCache(), size = null) {
     this.cv = canvas;
     this.ctx = canvas.getContext('2d');
     this.bg = bg;
-    this.imgs = images;
+    this.cache = cache;
+    this.size = size;
   }
 
-  async load(slides) {
-    for (const s of slides) {
-      if (this.imgs.has(s.imageId)) continue;
-      const blob = await db.getBlob(s.imageId);
-      if (blob) this.imgs.set(s.imageId, await loadImage(blob));
+  // Load current image (and neighbours) before drawing; used by export.
+  async ensure(st) {
+    const sl = st?.slides[st.i];
+    if (sl) await this.cache.get(sl.imageId);
+  }
+
+  prefetch(st) {
+    if (!st) return;
+    for (const d of [1, -1, 2]) {
+      const sl = st.slides[st.i + d];
+      if (sl) this.cache.get(sl.imageId);
     }
   }
 
   draw(st) {
     const { ctx, cv } = this;
-    const W = cv.width, H = cv.height;
+    const W = this.size?.w || cv.width, H = this.size?.h || cv.height;
+    const k = cv.width / W;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
     ctx.fillStyle = this.bg;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(0, 0, cv.width, cv.height);
     const sl = st?.slides[st.i];
     if (!sl) return;
     const m = viewMatrix(W, H, sl, st.v);
-    ctx.setTransform(m.a, m.b, m.c, m.d, m.e, m.f);
-    const img = this.imgs.get(sl.imageId);
+    ctx.setTransform(m.a * k, m.b * k, m.c * k, m.d * k, m.e * k, m.f * k);
+    const img = this.cache.peek(sl.imageId);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     if (img) ctx.drawImage(img, 0, 0, sl.w, sl.h);
     for (const a of st.ann[sl.id] || []) drawAnn(ctx, a);
     if (st.laser) {
-      const [x, y] = applyM(m, st.laser);
+      const [x0, y0] = applyM(m, st.laser);
+      const x = x0 * k, y = y0 * k;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      const r = W / 90;
+      const r = cv.width / 90;
       const g = ctx.createRadialGradient(x, y, 0, x, y, r * 2.2);
       g.addColorStop(0, 'rgba(255,70,50,1)');
       g.addColorStop(0.35, 'rgba(255,70,50,0.85)');
@@ -273,5 +330,6 @@ export class Painter {
       ctx.arc(x, y, r * 0.35, 0, Math.PI * 2);
       ctx.fill();
     }
+    this.prefetch(st);
   }
 }

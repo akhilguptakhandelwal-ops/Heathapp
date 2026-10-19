@@ -2,19 +2,23 @@
 import { uid } from './util.js';
 
 const DB_NAME = 'slidevox';
-const VERSION = 1;
+const VERSION = 2;
 let dbp;
 
 function open() {
   if (dbp) return dbp;
   dbp = new Promise((res, rej) => {
     const r = indexedDB.open(DB_NAME, VERSION);
-    r.onupgradeneeded = () => {
+    r.onupgradeneeded = (e) => {
       const d = r.result;
-      d.createObjectStore('projects', { keyPath: 'id' });
-      const rs = d.createObjectStore('recordings', { keyPath: 'id' });
-      rs.createIndex('projectId', 'projectId');
-      d.createObjectStore('blobs', { keyPath: 'id' });
+      if (e.oldVersion < 1) {
+        d.createObjectStore('projects', { keyPath: 'id' });
+        const rs = d.createObjectStore('recordings', { keyPath: 'id' });
+        rs.createIndex('projectId', 'projectId');
+        d.createObjectStore('blobs', { keyPath: 'id' });
+      }
+      // Intro / outro clips that are added to every video.
+      if (e.oldVersion < 2) d.createObjectStore('library', { keyPath: 'id' });
     };
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
@@ -57,9 +61,12 @@ export async function askPersistentStorage() {
 }
 
 // Image ids that a recording still needs (so we don't delete them).
-export function imagesUsedBy(rec) {
+export function blobsUsedBy(rec) {
   const ids = new Set();
-  for (const ev of rec.events) if (ev.k === 'snap') for (const s of ev.st.slides) ids.add(s.imageId);
+  for (const ev of rec.events) {
+    if (ev.k !== 'snap') continue;
+    for (const s of ev.st.slides) { ids.add(s.imageId); if (s.blobId) ids.add(s.blobId); }
+  }
   return ids;
 }
 
@@ -72,8 +79,10 @@ export async function deleteRecording(rec) {
 
 export async function deleteProject(p) {
   const recs = await db.byIndex('recordings', 'projectId', p.id);
-  const keep = new Set();
   for (const r of recs) await deleteRecording(r);
-  for (const s of p.slides) if (!keep.has(s.imageId)) await db.delBlob(s.imageId);
+  for (const s of p.slides) {
+    await db.delBlob(s.imageId);
+    if (s.blobId) await db.delBlob(s.blobId);
+  }
   await db.del('projects', p.id);
 }

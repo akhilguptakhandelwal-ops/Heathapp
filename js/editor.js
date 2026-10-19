@@ -1,9 +1,11 @@
 // Editor: preview, timeline, cuts, voice/music volume, music, export.
-import { h, toast, fmt, clamp, uid, debounce, modal, promptBox, confirmBox, pickFiles, keepAwake, downloadBlob, shareBlob, extFor } from './util.js';
+import { h, toast, fmt, clamp, uid, debounce, modal, promptBox, confirmBox, pickFiles, keepAwake, downloadBlob, shareBlob, extFor, enterImmersive, exitImmersive } from './util.js';
 import { icon } from './icons.js';
 import { db, deleteRecording } from './db.js';
 import { Painter, Player } from './renderer.js';
-import { defaultEdl, TimeMap, decodeBlob, analyzeVoice, analyzeMusic, computeCurves, startMix, pickMime, VIDEO_MIMES } from './mix.js';
+import { defaultEdl, TimeMap, decodeBlob, analyzeVoice, analyzeMusic, computeCurves, startMix } from './mix.js';
+import { PRESETS, presetSize, compose, insertionPoints, supportedPresets, fastExport, realtimeExport } from './export.js';
+import { settings } from './settings.js';
 import { openRecorder } from './recorder.js';
 
 const PAD = 14;
@@ -84,13 +86,13 @@ export async function editorScreen(root, { recId }) {
   recalcEnv();
 
   // ---------- preview ----------
-  const images = new Map();
-  const allSlides = [];
-  for (const ev of rec.events) if (ev.k === 'snap') allSlides.push(...ev.st.slides);
-  const cv = h('canvas', { class: 'preview-cv', width: rec.w, height: rec.h });
-  const painter = new Painter(cv, rec.bg, images);
-  await painter.load(allSlides);
+  const vertical = rec.h > rec.w;
+  const cv = h('canvas', { class: `preview-cv ${vertical ? 'vertical' : ''}`, width: rec.w, height: rec.h });
+  const painter = new Painter(cv, rec.bg);
   const player = new Player(rec.events);
+  painter.cache.onload = () => { if (!playing) renderFrame(); };
+  await painter.ensure(player.seek(0));
+  const clipPoints = insertionPoints(rec);
 
   let T = 0;
   let playing = false, mix = null;
@@ -238,7 +240,8 @@ export async function editorScreen(root, { recId }) {
       h('button', { class: 'btn primary', onclick: exportVideo }, icon('download', 18), 'Export')),
     h('div', { class: 'ed-main' },
       h('div', { class: 'ed-left' },
-        h('div', { class: 'preview' }, cv),
+        h('div', { class: 'preview' }, cv,
+          h('button', { class: 'preview-full', title: 'Full screen', onclick: fullPreview }, icon('expand', 18))),
         h('div', { class: 'transport' },
           h('button', { class: 'icon-btn', title: 'Go to start', onclick: () => seek(0) }, icon('toStart')),
           playBtn, timeEl, h('span', { class: 'grow' }), undoBtn, redoBtn)),
@@ -263,7 +266,7 @@ export async function editorScreen(root, { recId }) {
           h('div', { class: 'card-head' }, h('h2', null, icon('film', 18), 'Take')),
           exportRow,
           h('div', { class: 'btn-row' },
-            h('button', { class: 'btn', onclick: () => { saveRec.flush(); openRecorder(rec.projectId, rec.id); } }, icon('mic', 18), 'Continue recording'),
+            h('button', { class: 'btn', onclick: () => { saveRec.flush(); openRecorder(rec.projectId, rec.id, vertical ? 'portrait' : 'landscape'); } }, icon('mic', 18), 'Continue recording'),
             h('button', {
               class: 'btn ghost danger-text', onclick: async () => {
                 if (await confirmBox(`Delete ${rec.name}?`)) { await deleteRecording(rec); location.hash = `#/p/${rec.projectId}`; }
@@ -278,6 +281,16 @@ export async function editorScreen(root, { recId }) {
     timeEl.textContent = `${fmt(T, true)} / ${fmt(M.outD, true)}`;
     undoBtn.disabled = !undoStack.length;
     redoBtn.disabled = !redoStack.length;
+  }
+
+  async function fullPreview() {
+    const el = cv.parentElement;
+    try {
+      if (document.fullscreenElement) { await exitImmersive(); return; }
+      await el.requestFullscreen?.();
+      await screen.orientation?.lock?.(vertical ? 'portrait' : 'landscape');
+    } catch { /* not supported */ }
+    if (!playing) play();
   }
 
   // ---------- selection ----------
@@ -382,6 +395,19 @@ export async function editorScreen(root, { recId }) {
         h('span', { class: `tag ${g0.track}` }, g0.track === 'voice' ? 'Voice' : 'Music'),
         h('span', { class: 'grow' }, `${g0.g === 0 ? 'Muted' : `${Math.round(g0.g * 100)}%`} · ${fmt(oa, true)} → ${fmt(ob, true)}`),
         h('button', { class: 'btn small ghost', onclick: () => commit((e) => { e.gains = e.gains.filter((x) => x.gid !== gid); }) }, 'Remove')));
+    }
+    for (const cp of clipPoints) {
+      const skipped = (edl.skipClips || []).includes(cp.key);
+      rows.push(h('div', { class: `edit-row ${skipped ? 'off' : ''}` },
+        h('span', { class: 'tag music' }, cp.item.kind === 'video' ? 'Clip' : 'Audio'),
+        h('span', { class: 'grow' }, `${cp.item.name} (${fmt(cp.item.dur)}) plays at ${fmt(M.toOut(cp.t), true)}${skipped ? ' · skipped' : ''}`),
+        h('button', {
+          class: 'btn small ghost', onclick: () => commit((e) => {
+            const list = new Set(e.skipClips || []);
+            if (list.has(cp.key)) list.delete(cp.key); else list.add(cp.key);
+            e.skipClips = [...list];
+          }),
+        }, skipped ? 'Include' : 'Skip')));
     }
     if (!rows.length) rows.push(h('p', { class: 'muted small' }, 'No edits yet. Select a part on the timeline to cut it or change its volume.'));
     editsCard.append(...rows);
@@ -544,6 +570,15 @@ export async function editorScreen(root, { recId }) {
       c.setLineDash([]);
       c.beginPath(); c.moveTo(x - 5, 18); c.lineTo(x + 5, 18); c.lineTo(x, 25); c.fill();
     }
+    // inserted video / audio clips
+    for (const cp of clipPoints) {
+      const x = X(M.toOut(cp.t));
+      if (x < -10 || x > tlW + 10) continue;
+      const skipped = (edl.skipClips || []).includes(cp.key);
+      const [y, hh] = LANES.video;
+      c.fillStyle = skipped ? '#5d5447' : C.music;
+      c.beginPath(); c.moveTo(x, y - 2); c.lineTo(x + 7, y + hh / 2); c.lineTo(x, y + hh + 2); c.lineTo(x - 7, y + hh / 2); c.fill();
+    }
     // selection
     if (sel) {
       const xa = X(sel.a), xb = X(sel.b);
@@ -671,80 +706,123 @@ export async function editorScreen(root, { recId }) {
   // ---------- export ----------
   async function exportVideo() {
     pause();
-    const mime = pickMime(VIDEO_MIMES);
-    if (!mime || !HTMLCanvasElement.prototype.captureStream) {
-      toast('This browser cannot export video. Please use Chrome or Safari.', 4000);
-      return;
-    }
+    const library = await db.all('library');
+    const nIntro = library.filter((l) => l.pos === 'start').length;
+    const nOutro = library.filter((l) => l.pos === 'end').length;
+    const opts = { intro: nIntro > 0, outro: nOutro > 0 };
+    const sup = await supportedPresets(rec);
+    let presetId = sup.ok.has(settings.exportPreset) ? settings.exportPreset : [...sup.ok].pop() || 'medium';
+
+    const durEl = h('span', { class: 'muted small' });
+    const updateDur = () => {
+      const comp = compose(rec, M, edl, library, opts);
+      durEl.textContent = `Final length ${fmt(comp.total)}`;
+    };
+    const cards = h('div', { class: 'preset-list' }, PRESETS.map((p) => {
+      const { w, h: hh } = presetSize(p, rec);
+      const disabled = !sup.ok.has(p.id);
+      return h('button', {
+        class: `preset ${p.id === presetId ? 'on' : ''}`, disabled,
+        onclick: (e) => { presetId = p.id; cards.querySelectorAll('.preset').forEach((x) => x.classList.toggle('on', x === e.currentTarget)); },
+      },
+      h('span', { class: 'preset-dot' }),
+      h('span', { class: 'grow' }, h('b', null, p.label), h('span', { class: 'muted small' }, ` ${p.sub}`)),
+      h('span', { class: 'muted small mono' }, disabled ? 'not on this phone' : `${w}×${hh}`));
+    }));
+    const check = (label, key, n) => h('label', { class: `check ${n ? '' : 'disabled'}` },
+      h('input', { type: 'checkbox', checked: opts[key], disabled: !n, onchange: (e) => { opts[key] = e.target.checked; updateDur(); } }),
+      h('span', null, n ? `${label} (${n})` : `${label} — none saved yet (add on Home → Intro & outro)`));
+    updateDur();
+    const go = await modal({
+      title: 'Export video',
+      body: h('div', { class: 'form' },
+        h('label', null, 'Quality'),
+        cards,
+        h('label', null, 'Always-added clips'),
+        check('Add intro at the start', 'intro', nIntro),
+        check('Add outro at the end', 'outro', nOutro),
+        durEl,
+        h('p', { class: 'muted small' }, sup.fast
+          ? 'Fast mode: the video is built directly on your phone — usually much faster than its length.'
+          : 'This browser has no fast encoder, so export runs at normal speed. Use the latest Chrome for fast export.')),
+      buttons: [{ label: 'Cancel', value: false }, { label: 'Export', kind: 'primary', value: true }],
+    });
+    if (!go) return;
+    settings.exportPreset = presetId;
+    const preset = PRESETS.find((p) => p.id === presetId);
+    const comp = compose(rec, M, edl, library, opts);
+
     let cancelled = false;
-    const ecv = h('canvas', { class: 'export-cv', width: rec.w, height: rec.h });
-    const ep = new Painter(ecv, rec.bg, images);
-    const pl = new Player(rec.events);
     const fill = h('div', { class: 'bar-fill' });
     const label = h('div', { class: 'muted small' }, 'Starting…');
-    const cancelBtn = h('button', { class: 'btn', onclick: () => { cancelled = true; } }, 'Cancel');
+    const live = h('canvas', { class: 'export-cv' });
     const box = h('div', { class: 'modal-wrap' }, h('div', { class: 'modal export-modal' },
-      h('h3', null, 'Exporting video'),
-      ecv,
+      h('h3', null, `Exporting · ${preset.label}`),
+      sup.fast ? null : live,
       h('div', { class: 'bar' }, fill),
       label,
-      h('p', { class: 'muted small' }, 'Keep this screen open until it finishes. Export runs at normal speed.'),
-      h('div', { class: 'modal-actions' }, cancelBtn)));
+      h('p', { class: 'muted small' }, 'Keep this screen open until it finishes.'),
+      h('div', { class: 'modal-actions' }, h('button', { class: 'btn', onclick: () => { cancelled = true; label.textContent = 'Cancelling…'; } }, 'Cancel'))));
     document.body.append(box);
-
-    ep.draw(pl.seek(M.toSrc(0)));
-    const vstream = ecv.captureStream(30);
-    const dest = actx.createMediaStreamDestination();
-    const stream = new MediaStream([...vstream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
-    let mr;
+    const wake = await keepAwake();
+    const take = { M, parts, musicBuf, edl, va };
+    const onProgress = (k, msg) => { fill.style.width = `${(k * 100).toFixed(1)}%`; label.textContent = msg; };
+    const t0 = performance.now();
+    let blob;
     try {
-      mr = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: rec.h >= 1080 ? 8_000_000 : 5_000_000, audioBitsPerSecond: 160_000 });
-    } catch (err) {
+      const args = { rec, take, comp, preset, onProgress, cancelled: () => cancelled, previewCanvas: live };
+      if (sup.fast) {
+        try {
+          blob = await fastExport(args);
+        } catch (e) {
+          if (e.message === 'CANCELLED') throw e;
+          console.error(e);
+          label.textContent = 'Fast mode failed on this phone — using normal speed…';
+          blob = await realtimeExport(args);
+        }
+      } else {
+        blob = await realtimeExport(args);
+      }
+    } catch (e) {
+      wake?.release?.().catch(() => {});
       box.remove();
-      toast(`Export failed: ${err.message}`, 5000);
+      if (e.message === 'CANCELLED') toast('Export cancelled');
+      else { console.error(e); toast(`Export failed: ${e.message}`, 6000); }
       return;
     }
-    const chunks = [];
-    mr.ondataavailable = (ev) => { if (ev.data && ev.data.size) chunks.push(ev.data); };
-    const stopped = new Promise((res) => { mr.onstop = res; });
-    await actx.resume();
-    const wake = await keepAwake();
-    mr.start(500);
-    const m = startMix(actx, dest, M, parts, musicBuf, edl, va, 0);
-    await new Promise((res) => {
-      const step = () => {
-        if (cancelled) return res();
-        const t = m.time();
-        ep.draw(pl.seek(M.toSrc(Math.min(t, M.outD))));
-        const k = M.outD ? Math.min(1, t / M.outD) : 1;
-        fill.style.width = `${(k * 100).toFixed(1)}%`;
-        label.textContent = `${fmt(t)} / ${fmt(M.outD)}`;
-        if (t >= M.outD + 0.3) return res();
-        requestAnimationFrame(step);
-      };
-      step();
-    });
-    m.stop();
-    if (mr.state !== 'inactive') mr.stop();
-    await stopped;
-    vstream.getTracks().forEach((tr) => tr.stop());
     wake?.release?.().catch(() => {});
-    if (cancelled) { box.remove(); toast('Export cancelled'); return; }
+    const secs = (performance.now() - t0) / 1000;
 
-    const blob = new Blob(chunks, { type: mime.split(';')[0] });
     if (rec.exportId) await db.delBlob(rec.exportId);
     rec.exportId = await db.putBlob(blob);
     saveRec.flush();
     renderPanels();
+    showResult(box, blob, secs, preset);
+  }
+
+  function showResult(box, blob, secs, preset) {
     const name = fileName(blob);
-    box.querySelector('h3').textContent = 'Video ready';
-    label.textContent = `${name} · ${(blob.size / 1e6).toFixed(1)} MB`;
-    const actionsEl = box.querySelector('.modal-actions');
-    actionsEl.innerHTML = '';
-    actionsEl.append(
-      h('button', { class: 'btn', onclick: () => box.remove() }, 'Close'),
-      h('button', { class: 'btn', onclick: () => downloadBlob(blob, name) }, icon('download', 18), 'Save'),
-      h('button', { class: 'btn primary', onclick: () => shareBlob(blob, name) }, icon('share', 18), 'Share'));
+    const url = URL.createObjectURL(blob);
+    const video = h('video', { class: 'result-video', src: url, controls: true, playsinline: true });
+    video.playsInline = true;
+    const playFull = async () => {
+      try {
+        await (video.requestFullscreen?.() || video.webkitEnterFullscreen?.());
+        await screen.orientation?.lock?.(vertical ? 'portrait' : 'landscape');
+      } catch { /* not supported */ }
+      video.play().catch(() => {});
+    };
+    const m = box.querySelector('.modal');
+    m.innerHTML = '';
+    m.append(
+      h('h3', null, 'Video ready'),
+      video,
+      h('div', { class: 'muted small result-meta' }, `${preset.label} · ${(blob.size / 1e6).toFixed(1)} MB · made in ${fmt(secs)}`),
+      h('div', { class: 'modal-actions' },
+        h('button', { class: 'btn', onclick: () => { URL.revokeObjectURL(url); box.remove(); } }, 'Close'),
+        h('button', { class: 'btn', onclick: playFull }, icon('play', 16), 'Play full screen'),
+        h('button', { class: 'btn', onclick: () => downloadBlob(blob, name) }, icon('download', 18), 'Save'),
+        h('button', { class: 'btn primary', onclick: () => shareBlob(blob, name) }, icon('share', 18), 'Share')));
   }
 
   syncTransport();
