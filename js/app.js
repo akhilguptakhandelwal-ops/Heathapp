@@ -33,6 +33,14 @@ window.addEventListener('hashchange', () => { routing = routing.then(route); });
 routing = routing.then(route);
 askPersistentStorage();
 
+// Keep the browser's install prompt so the Home screen can offer a button.
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window.__installPrompt = e;
+  window.dispatchEvent(new Event('install-ready'));
+});
+window.addEventListener('appinstalled', () => { window.__installPrompt = null; window.dispatchEvent(new Event('install-ready')); });
+
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }

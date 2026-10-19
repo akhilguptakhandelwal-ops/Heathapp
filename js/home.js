@@ -124,6 +124,37 @@ export async function homeScreen(root) {
     renderLibrary();
   }
 
+  // "Install app" card: hidden once the app runs from the home screen.
+  const installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const installCard = h('section', { class: 'card install-card' });
+  function renderInstall() {
+    installCard.innerHTML = '';
+    if (installed) { installCard.classList.add('hidden'); return; }
+    const prompt = window.__installPrompt;
+    installCard.append(
+      h('div', { class: 'install-row' },
+        h('span', { class: 'brand-mark' }, icon('download', 20)),
+        h('div', { class: 'grow' },
+          h('b', null, 'Install on your phone'),
+          h('div', { class: 'muted small' }, prompt
+            ? 'Adds SlideVox to your home screen. Opens full screen, works offline.'
+            : isIOS
+              ? 'In Safari: tap Share (square with arrow) → “Add to Home Screen”.'
+              : 'In Chrome: tap ⋮ menu → “Install app” or “Add to Home screen”.')),
+        prompt && h('button', {
+          class: 'btn primary small', onclick: async () => {
+            prompt.prompt();
+            const r = await prompt.userChoice.catch(() => null);
+            if (r?.outcome === 'accepted') toast('Installing… find SlideVox on your home screen');
+            window.__installPrompt = null;
+            renderInstall();
+          },
+        }, 'Install')));
+  }
+  renderInstall();
+  window.addEventListener('install-ready', renderInstall);
+
   root.append(h('div', { class: 'page' },
     h('header', { class: 'topbar' },
       h('div', { class: 'brand' }, h('span', { class: 'brand-mark' }, icon('film', 20)), h('span', null, 'SlideVox Studio')),
@@ -132,6 +163,7 @@ export async function homeScreen(root) {
       h('section', { class: 'hero' },
         h('h1', null, 'Make explainer videos from your phone'),
         h('p', { class: 'muted' }, 'Add images → paste your script → record voice while you zoom, tick and circle → cut, add music, export.')),
+      installCard,
       h('button', { class: 'btn primary big', onclick: newProject }, icon('plus'), 'New project'),
       h('h2', { class: 'section-title' }, 'Your projects'),
       list,
@@ -144,5 +176,5 @@ export async function homeScreen(root) {
 
   await render();
   await renderLibrary();
-  return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  return () => { window.removeEventListener('install-ready', renderInstall); urls.forEach((u) => URL.revokeObjectURL(u)); };
 }
