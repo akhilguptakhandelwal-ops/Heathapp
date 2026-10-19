@@ -2,7 +2,8 @@
 const KEY = 'slidevox.settings';
 
 const defaults = {
-  swipe: true,          // swipe on the stage to change image
+  swipe: true,
+  autoSave: true,       // APK: save every export to Documents/SlideVox          // swipe on the stage to change image
   exportPreset: 'high',
   bg: '#0e0c0a',        // letterbox colour behind images
   countdown: true,      // 3-2-1 before recording

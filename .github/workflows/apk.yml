@@ -33,6 +33,9 @@ jobs:
         run: |
           npm ci
           npm run build:www
+          # Stamp the build number so the app can tell when an update exists.
+          sed -i "s/export const BUILD = 0;/export const BUILD = ${{ github.run_number }};/; s/export const CHANNEL = 'web';/export const CHANNEL = 'apk';/" www/js/version.js
+          grep BUILD www/js/version.js
           npx cap sync android
       - name: Build APK
         env:

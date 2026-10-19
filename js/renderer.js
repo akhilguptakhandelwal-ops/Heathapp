@@ -8,7 +8,7 @@ import { loadImage } from './util.js';
 const COS_SIN = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 
 export function slideLite(s) {
-  const o = { id: s.id, imageId: s.imageId, w: s.w, h: s.h };
+  const o = { id: s.id, imageId: s.imageId, w: s.w, h: s.h, name: s.name };
   if (s.kind && s.kind !== 'image') Object.assign(o, { kind: s.kind, blobId: s.blobId, dur: s.dur, name: s.name });
   return o;
 }

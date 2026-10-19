@@ -1,10 +1,11 @@
 // Editor: preview, timeline, cuts, voice/music volume, music, export.
-import { h, toast, fmt, clamp, uid, debounce, modal, promptBox, confirmBox, pickFiles, keepAwake, downloadBlob, shareBlob, extFor, exitImmersive, lockOrientation } from './util.js';
+import { h, toast, fmt, clamp, uid, debounce, modal, promptBox, confirmBox, pickFiles, keepAwake, downloadBlob, shareBlob, extFor, exitImmersive, lockOrientation, native } from './util.js';
 import { icon } from './icons.js';
 import { db, deleteRecording } from './db.js';
 import { Painter, Player } from './renderer.js';
-import { defaultEdl, TimeMap, decodeBlob, analyzeVoice, analyzeMusic, computeCurves, startMix } from './mix.js';
-import { PRESETS, presetSize, compose, insertionPoints, supportedPresets, fastExport, realtimeExport } from './export.js';
+import { defaultEdl, TimeMap, decodeBlob, analyzeVoice, analyzeMusic, computeCurves, startMix, VOICE_PRESETS } from './mix.js';
+import { PRESETS, presetSize, compose, insertionPoints, recordedSequence, supportedPresets, fastExport, realtimeExport } from './export.js';
+import { importClip } from './media.js';
 import { settings } from './settings.js';
 import { openRecorder } from './recorder.js';
 
@@ -221,6 +222,7 @@ export async function editorScreen(root, { recId }) {
       },
     }, icon('music', 18), 'Music volume'));
   const mixCard = h('section', { class: 'card' });
+  const fxCard = h('section', { class: 'card' });
   const editsCard = h('section', { class: 'card' });
   const exportRow = h('div', { class: 'export-row' });
 
@@ -260,6 +262,7 @@ export async function editorScreen(root, { recId }) {
             h('button', { class: 'btn small ghost', onclick: () => { sel = null; renderSel(); drawTL(); } }, 'Clear'),
             selInfo),
           actions),
+        fxCard,
         mixCard,
         editsCard,
         h('section', { class: 'card' },
@@ -344,7 +347,40 @@ export async function editorScreen(root, { recId }) {
     });
   }
 
+  function renderFx() {
+    fxCard.innerHTML = '';
+    const fx = edl.voiceFx || VOICE_PRESETS.natural.fx;
+    const db = (v) => `${v > 0 ? '+' : ''}${Math.round(v)} dB`;
+    const amt = (v) => `${Math.round(v * 100)}%`;
+    const tune = (key, label, min, max, step, show) => slider({
+      label, min, max, step, get: () => (edl.voiceFx || {})[key] || 0,
+      set: (v) => { edl.voiceFx = { ...(edl.voiceFx || VOICE_PRESETS.natural.fx), [key]: v, preset: 'custom' }; },
+      show,
+    });
+    const open = fxCard.dataset.open === '1';
+    fxCard.append(
+      h('div', { class: 'card-head' },
+        h('h2', null, icon('mic', 18), 'Voice effect'),
+        h('span', { class: 'muted small' }, fx.preset === 'custom' ? 'Custom' : VOICE_PRESETS[fx.preset]?.label || 'Natural')),
+      h('div', { class: 'chips' }, Object.entries(VOICE_PRESETS).map(([id, p]) =>
+        h('button', {
+          class: `chip ${fx.preset === id ? 'on' : ''}`,
+          onclick: () => { commit((e) => { e.voiceFx = { ...p.fx }; }); toast(`${p.label} voice — press play to hear it`); },
+        }, p.label))),
+      h('button', { class: 'btn small ghost fx-more', onclick: () => { fxCard.dataset.open = open ? '0' : '1'; renderFx(); } },
+        open ? 'Hide fine tuning' : 'Fine tune (bass, echo, …)'),
+      open && h('div', { class: 'fx-sliders' },
+        tune('bass', 'Bass (deep / heavy)', -6, 12, 1, db),
+        tune('presence', 'Clarity (voice presence)', -6, 10, 1, db),
+        tune('treble', 'Treble (shine)', -6, 10, 1, db),
+        tune('punch', 'Energy (loud & tight)', 0, 1, 0.05, amt),
+        tune('echo', 'Echo', 0, 1, 0.05, amt),
+        tune('room', 'Depth (room / hall)', 0, 1, 0.05, amt)),
+      h('p', { class: 'muted small' }, 'Effects never change your original recording — switch any time. They are applied in preview and in the exported video.'));
+  }
+
   function renderPanels() {
+    renderFx();
     mixCard.innerHTML = '';
     const m = edl.music;
     const seg = (opts, cur, onPick) => h('div', { class: 'seg' }, opts.map(([v, label]) =>
@@ -706,16 +742,18 @@ export async function editorScreen(root, { recId }) {
   // ---------- export ----------
   async function exportVideo() {
     pause();
-    const library = await db.all('library');
-    const nIntro = library.filter((l) => l.pos === 'start').length;
-    const nOutro = library.filter((l) => l.pos === 'end').length;
-    const opts = { intro: nIntro > 0, outro: nOutro > 0 };
+    let library = (await db.all('library')).sort((a, b) => a.created - b.created);
+    // Which saved clips to add and where; remembered for next time.
+    const choices = { ...(settings.exportClips || {}) };
+    const choiceFor = (l) => (choices[l.id] ||= { on: l.pos === 'start' || l.pos === 'end', where: l.pos === 'start' ? 'start' : 'end' });
+    const extras = () => library.filter((l) => choiceFor(l).on).map((l) => ({ item: l, where: choiceFor(l).where }));
+    const { slides: seq } = recordedSequence(rec);
     const sup = await supportedPresets(rec);
     let presetId = sup.ok.has(settings.exportPreset) ? settings.exportPreset : [...sup.ok].pop() || 'medium';
 
     const durEl = h('span', { class: 'muted small' });
     const updateDur = () => {
-      const comp = compose(rec, M, edl, library, opts);
+      const comp = compose(rec, M, edl, extras());
       durEl.textContent = `Final length ${fmt(comp.total)}`;
     };
     const cards = h('div', { class: 'preset-list' }, PRESETS.map((p) => {
@@ -729,28 +767,71 @@ export async function editorScreen(root, { recId }) {
       h('span', { class: 'grow' }, h('b', null, p.label), h('span', { class: 'muted small' }, ` ${p.sub}`)),
       h('span', { class: 'muted small mono' }, disabled ? 'not on this phone' : `${w}×${hh}`));
     }));
-    const check = (label, key, n) => h('label', { class: `check ${n ? '' : 'disabled'}` },
-      h('input', { type: 'checkbox', checked: opts[key], disabled: !n, onchange: (e) => { opts[key] = e.target.checked; updateDur(); } }),
-      h('span', null, n ? `${label} (${n})` : `${label} — none saved yet (add on Home → Intro & outro)`));
+    const clipList = h('div', { class: 'clip-pick' });
+    const thumbs = [];
+    const renderClips = async () => {
+      clipList.innerHTML = '';
+      if (!library.length) clipList.append(h('p', { class: 'muted small' }, 'No saved clips yet. Save your intro / ending clip once and pick it here every time.'));
+      for (const l of library) {
+        const c = choiceFor(l);
+        const b = await db.getBlob(l.imageId);
+        const u = b ? URL.createObjectURL(b) : '';
+        if (u) thumbs.push(u);
+        const where = h('select', {
+          class: 'field small-field', disabled: !c.on,
+          onchange: (e) => { c.where = /^\d+$/.test(e.target.value) ? +e.target.value : e.target.value; updateDur(); },
+        },
+        h('option', { value: 'start' }, 'At the start'),
+        seq.slice(0, -1).map((s, k) => h('option', { value: String(k) }, `After #${k + 1} ${(s.name || `Image ${k + 1}`).slice(0, 22)}`)),
+        h('option', { value: 'end' }, 'At the end'));
+        where.value = String(c.where);
+        clipList.append(h('div', { class: `clip-row ${c.on ? 'on' : ''}` },
+          h('label', { class: 'check' },
+            h('input', { type: 'checkbox', checked: c.on, onchange: (e) => { c.on = e.target.checked; where.disabled = !c.on; e.target.closest('.clip-row').classList.toggle('on', c.on); updateDur(); } }),
+            h('span', { class: 'item-thumb' }, u && h('img', { src: u, alt: '' })),
+            h('span', { class: 'grow' }, h('b', null, l.name), h('span', { class: 'muted small' }, ` ${fmt(l.dur)}`))),
+          where));
+      }
+    };
+    const addSaved = h('button', {
+      class: 'btn small', onclick: async () => {
+        const [f] = await pickFiles('video/*,audio/*');
+        if (!f) return;
+        toast('Saving clip…', 6000);
+        try {
+          const item = await importClip(f);
+          Object.assign(item, { pos: 'end', created: Date.now() });
+          await db.put('library', item);
+          library = [...library, item];
+          choices[item.id] = { on: true, where: 'end' };
+          await renderClips();
+          updateDur();
+          toast('Clip saved — it stays saved for next time');
+        } catch { toast(`Could not open ${f.name}`, 3500); }
+      },
+    }, icon('plus', 16), 'Save a new clip');
+    await renderClips();
     updateDur();
     const go = await modal({
       title: 'Export video',
       body: h('div', { class: 'form' },
         h('label', null, 'Quality'),
         cards,
-        h('label', null, 'Always-added clips'),
-        check('Add intro at the start', 'intro', nIntro),
-        check('Add outro at the end', 'outro', nOutro),
+        h('label', null, 'Add saved clips (tick + choose where)'),
+        clipList,
+        addSaved,
         durEl,
         h('p', { class: 'muted small' }, sup.fast
           ? 'Fast mode: the video is built directly on your phone — usually much faster than its length.'
           : 'This browser has no fast encoder, so export runs at normal speed. Use the latest Chrome for fast export.')),
       buttons: [{ label: 'Cancel', value: false }, { label: 'Export', kind: 'primary', value: true }],
     });
+    thumbs.forEach((u) => URL.revokeObjectURL(u));
     if (!go) return;
     settings.exportPreset = presetId;
+    settings.exportClips = choices;
     const preset = PRESETS.find((p) => p.id === presetId);
-    const comp = compose(rec, M, edl, library, opts);
+    const comp = compose(rec, M, edl, extras());
 
     let cancelled = false;
     const fill = h('div', { class: 'bar-fill' });
@@ -814,6 +895,8 @@ export async function editorScreen(root, { recId }) {
     };
     const m = box.querySelector('.modal');
     m.innerHTML = '';
+    // In the Android app every export also goes straight to the phone folder.
+    if (native() && settings.autoSave !== false) downloadBlob(blob, name);
     m.append(
       h('h3', null, 'Video ready'),
       video,

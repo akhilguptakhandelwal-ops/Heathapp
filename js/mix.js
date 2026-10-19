@@ -9,7 +9,78 @@ export function defaultEdl() {
     music: null,     // {blobId, name, start, vol, loop, fadeOut}
     priority: 'voice', // 'voice' | 'music' | 'equal'
     duck: 0.3,       // how far the lower track dips
+    voiceFx: { ...VOICE_PRESETS.natural.fx },
   };
+}
+
+// ---------- voice effects ----------
+// bass/presence/treble in dB; echo, room, punch 0..1
+export const VOICE_PRESETS = {
+  natural: { label: 'Natural', fx: { preset: 'natural', bass: 0, presence: 0, treble: 0, echo: 0, room: 0, punch: 0 } },
+  energetic: { label: 'Energetic', fx: { preset: 'energetic', bass: 2, presence: 5, treble: 3, echo: 0, room: 0, punch: 0.75 } },
+  deep: { label: 'Deep', fx: { preset: 'deep', bass: 7, presence: -1, treble: -3, echo: 0, room: 0.15, punch: 0.35 } },
+  bass: { label: 'Bass boost', fx: { preset: 'bass', bass: 10, presence: 1, treble: 0, echo: 0, room: 0, punch: 0.35 } },
+  echo: { label: 'Echo', fx: { preset: 'echo', bass: 1, presence: 1, treble: 0, echo: 0.5, room: 0.1, punch: 0.2 } },
+  hall: { label: 'Big hall', fx: { preset: 'hall', bass: 2, presence: 0, treble: -1, echo: 0, room: 0.55, punch: 0.2 } },
+  clear: { label: 'Crisp & clear', fx: { preset: 'clear', bass: -2, presence: 4, treble: 4, echo: 0, room: 0, punch: 0.45 } },
+  radio: { label: 'Radio', fx: { preset: 'radio', bass: -4, presence: 6, treble: 1, echo: 0, room: 0, punch: 0.9 } },
+};
+
+export const isFlatFx = (fx) => !fx || ['bass', 'presence', 'treble', 'echo', 'room', 'punch'].every((k) => !fx[k]);
+
+function roomImpulse(ctx, secs = 2.2) {
+  const len = Math.floor(ctx.sampleRate * secs);
+  const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = ir.getChannelData(c);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+  }
+  return ir;
+}
+
+// Builds input -> EQ -> compressor -> (dry + echo + room) -> output.
+export function buildVoiceFx(ctx, fx) {
+  const input = ctx.createGain();
+  const output = ctx.createGain();
+  if (isFlatFx(fx)) { input.connect(output); return { input, output }; }
+  const low = ctx.createBiquadFilter();
+  low.type = 'lowshelf'; low.frequency.value = 170; low.gain.value = fx.bass || 0;
+  const mid = ctx.createBiquadFilter();
+  mid.type = 'peaking'; mid.frequency.value = 3000; mid.Q.value = 0.9; mid.gain.value = fx.presence || 0;
+  const high = ctx.createBiquadFilter();
+  high.type = 'highshelf'; high.frequency.value = 8000; high.gain.value = fx.treble || 0;
+  input.connect(low); low.connect(mid); mid.connect(high);
+  let node = high;
+  const punch = fx.punch || 0;
+  if (punch > 0) {
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -16 - punch * 14;
+    comp.knee.value = 8;
+    comp.ratio.value = 2.5 + punch * 5;
+    comp.attack.value = 0.004;
+    comp.release.value = 0.18;
+    const makeup = ctx.createGain();
+    makeup.gain.value = 1 + punch * 0.9;
+    node.connect(comp); comp.connect(makeup);
+    node = makeup;
+  }
+  node.connect(output);
+  if (fx.echo > 0) {
+    const delay = ctx.createDelay(1.5);
+    delay.delayTime.value = 0.26;
+    const fb = ctx.createGain(); fb.gain.value = 0.25 + fx.echo * 0.25;
+    const tone = ctx.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 3500;
+    const wet = ctx.createGain(); wet.gain.value = fx.echo * 0.6;
+    node.connect(delay); delay.connect(tone); tone.connect(fb); fb.connect(delay);
+    tone.connect(wet); wet.connect(output);
+  }
+  if (fx.room > 0) {
+    const conv = ctx.createConvolver();
+    conv.buffer = roomImpulse(ctx, 1.2 + fx.room * 1.8);
+    const wet = ctx.createGain(); wet.gain.value = fx.room * 0.55;
+    node.connect(conv); conv.connect(wet); wet.connect(output);
+  }
+  return { input, output };
 }
 
 export function mergeRanges(rs) {
@@ -189,7 +260,9 @@ export function startMix(ctx, dest, M, parts, musicBuf, edl, va, T0, opts = {}) 
   const span = (curves.n - 1) / curves.rate;
   const vGain = ctx.createGain();
   const mGain = ctx.createGain();
-  vGain.connect(master);
+  const vfx = buildVoiceFx(ctx, edl.voiceFx);
+  vGain.connect(vfx.input);
+  vfx.output.connect(master);
   mGain.connect(master);
   vGain.gain.value = curves.v[0];
   mGain.gain.value = curves.m[0];

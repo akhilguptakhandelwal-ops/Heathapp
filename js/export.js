@@ -38,14 +38,35 @@ export function insertionPoints(rec) {
   return out;
 }
 
-export function compose(rec, M, edl, library, { intro = true, outro = true } = {}) {
+// The image/clip list as recorded, and when each item first appeared.
+export function recordedSequence(rec) {
+  let slides = [];
+  const first = new Map();
+  for (const ev of rec.events) {
+    let item = null;
+    if (ev.k === 'snap') { slides = ev.st.slides; item = slides[ev.st.i]; } else if (ev.k === 'slide') item = slides[ev.i];
+    if (item && !first.has(item.id)) first.set(item.id, ev.t);
+  }
+  return { slides, first };
+}
+
+// extras: [{ item, where: 'start' | 'end' | k }] — k = after item number k+1 of the sequence.
+export function compose(rec, M, edl, extras = []) {
   const pieces = [];
   let out = 0;
   const add = (p) => { if (p.dur > 0.01) { p.out0 = out; pieces.push(p); out += p.dur; } };
-  if (intro) for (const item of library.filter((l) => l.pos === 'start')) add({ kind: 'clip', item, dur: item.dur });
+  for (const x of extras.filter((e) => e.where === 'start')) add({ kind: 'clip', item: x.item, dur: x.item.dur });
   const pts = insertionPoints(rec)
     .filter((p) => !(edl.skipClips || []).includes(p.key))
     .map((p) => ({ ...p, T: M.toOut(p.t) }));
+  const { slides, first } = recordedSequence(rec);
+  const tail = extras.filter((e) => e.where === 'end');
+  for (const x of extras.filter((e) => typeof e.where === 'number')) {
+    const next = slides[x.where + 1];
+    const t = next ? first.get(next.id) : undefined;
+    if (t === undefined) tail.unshift(x);
+    else pts.push({ t, T: M.toOut(t), item: x.item, key: `extra-${x.item.id}` });
+  }
   pts.sort((a, b) => a.T - b.T);
   let T = 0;
   for (const p of pts) {
@@ -53,7 +74,7 @@ export function compose(rec, M, edl, library, { intro = true, outro = true } = {
     add({ kind: 'clip', item: p.item, dur: p.item.dur });
   }
   if (M.outD > T + 0.001) add({ kind: 'take', a: T, b: M.outD, dur: M.outD - T });
-  if (outro) for (const item of library.filter((l) => l.pos === 'end')) add({ kind: 'clip', item, dur: item.dur });
+  for (const x of tail) add({ kind: 'clip', item: x.item, dur: x.item.dur });
   return { pieces, total: out };
 }
 

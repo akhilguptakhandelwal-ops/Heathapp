@@ -4,7 +4,7 @@ import { icon } from './icons.js';
 import { db } from './db.js';
 import { settings, stageSize } from './settings.js';
 import { Painter, Player, emptyState, applyEvent, viewMatrix, applyM, invertM, fitView, slideLite, isClip } from './renderer.js';
-import { defaultEdl, pickMime, AUDIO_MIMES } from './mix.js';
+import { defaultEdl, pickMime, AUDIO_MIMES, VOICE_PRESETS } from './mix.js';
 
 const TOOLS = [
   ['move', 'hand', 'Move / zoom'],
@@ -99,7 +99,17 @@ export async function recorderScreen(root, { projectId, appendId }) {
   const toolFly = h('div', { class: 'flyout hidden' },
     h('div', { class: 'fly-grid' }, TOOLS.map(([id, ic, label]) =>
       h('button', { class: 'fly-item', 'data-tool': id, title: label, onclick: () => { setTool(id); closeFly(); } }, icon(ic, 24), h('span', null, label)))),
-    swipeBtn);
+    swipeBtn,
+    h('div', { class: 'fly-label' }, 'Voice effect for new takes (change later in the editor)'),
+    h('div', { class: 'chips fly-chips' }, Object.entries(VOICE_PRESETS).map(([id, p]) =>
+      h('button', {
+        class: `chip ${(settings.voiceFx?.preset || 'natural') === id ? 'on' : ''}`,
+        onclick: (e) => {
+          settings.voiceFx = { ...p.fx };
+          e.currentTarget.parentNode.querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === e.currentTarget));
+          toast(`Voice effect: ${p.label}`);
+        },
+      }, p.label))));
   const colorFly = h('div', { class: 'flyout hidden' },
     h('div', { class: 'fly-colors' }, COLORS.map((c) =>
       h('button', { class: 'color-dot', 'data-color': c, style: { background: c }, title: c, onclick: () => { setColor(c); closeFly(); } }))),
@@ -511,7 +521,8 @@ export async function recorderScreen(root, { projectId, appendId }) {
     const rec = {
       id: uid(), projectId, name: `Take ${recs.length + 1}`, created: Date.now(), updated: Date.now(),
       w: W, h: H, bg, duration: Math.round(dur * 1000) / 1000, events: log,
-      audioParts: [{ id: audioId, start: 0, mime: blob.type }], edl: defaultEdl(),
+      audioParts: [{ id: audioId, start: 0, mime: blob.type }],
+      edl: { ...defaultEdl(), voiceFx: { ...(settings.voiceFx || VOICE_PRESETS.natural.fx) } },
     };
     await db.put('recordings', rec);
     project.updated = Date.now();

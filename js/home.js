@@ -1,5 +1,6 @@
 import { h, uid, promptBox, confirmBox, modal, toast, pickFiles, fmt } from './util.js';
 import { importClip } from './media.js';
+import { checkForUpdate, openApkDownload, versionLabel } from './update.js';
 import { icon } from './icons.js';
 import { db, deleteProject } from './db.js';
 import { settings } from './settings.js';
@@ -68,10 +69,40 @@ export async function homeScreen(root) {
         seg('bg', [['#0e0c0a', 'Charcoal'], ['#ffffff', 'White'], ['#f3ede2', 'Paper'], ['#1f2a24', 'Forest']]),
         h('label', null, '3-2-1 countdown before recording'),
         seg('countdown', [[true, 'On'], [false, 'Off']]),
-        h('p', { class: 'muted small' }, 'Tip: open this page in Chrome (Android) or Safari (iPhone) and use “Add to Home screen” to install it like an app.')),
+        h('label', null, 'Save every exported video to the phone folder (Documents/SlideVox)'),
+        seg('autoSave', [[true, 'On'], [false, 'Off']]),
+        h('label', null, 'Version'),
+        h('div', { class: 'version-row' }, h('span', { class: 'grow' }, versionLabel()), updateBtn())),
       buttons: [{ label: 'Done', kind: 'primary', value: true }],
     });
   }
+
+  function updateBtn() {
+    const b = h('button', {
+      class: 'btn small', onclick: async () => {
+        b.disabled = true; b.textContent = 'Checking…';
+        try {
+          const u = await checkForUpdate();
+          if (!u) { location.reload(); return; }
+          if (u.newer) { await openApkDownload(); toast(`Downloading build ${u.latest} — open it to update`, 5000); }
+          else toast('You have the latest version');
+        } catch { toast('Could not check — are you online?'); }
+        b.disabled = false; b.textContent = 'Check for update';
+      },
+    }, 'Check for update');
+    return b;
+  }
+
+  // Shown on Home when GitHub has a newer Android build.
+  const updateCard = h('section', { class: 'card install-card hidden' });
+  checkForUpdate().then((u) => {
+    if (!u?.newer) return;
+    updateCard.classList.remove('hidden');
+    updateCard.append(h('div', { class: 'install-row' },
+      h('span', { class: 'brand-mark' }, icon('download', 20)),
+      h('div', { class: 'grow' }, h('b', null, 'New version available'), h('div', { class: 'muted small' }, `Build ${u.latest} (you have ${u.current}). Your projects stay safe.`)),
+      h('button', { class: 'btn primary small', onclick: () => { openApkDownload(); toast('When the download finishes, open it and tap Update', 5000); } }, 'Update')));
+  }).catch(() => {});
 
   // Intro / outro clips that are added to every export.
   const libList = h('div', { class: 'item-list' });
@@ -79,7 +110,7 @@ export async function homeScreen(root) {
     const items = (await db.all('library')).sort((a, b) => a.created - b.created);
     libList.innerHTML = '';
     if (!items.length) {
-      libList.append(h('p', { class: 'muted small' }, 'Save a short clip once (for example your channel intro or a “subscribe” ending). Mark it Start or End and it is added to every video you export.'));
+      libList.append(h('p', { class: 'muted small' }, 'Save a short clip once (for example your channel intro or a “subscribe” ending). Every time you export, tick the clips you want and choose where they go.'));
       return;
     }
     for (const it of items) {
@@ -95,7 +126,7 @@ export async function homeScreen(root) {
         h('div', { class: 'item-thumb' }, u && h('img', { src: u, alt: '' }), h('span', { class: 'item-badge' }, icon(it.kind === 'video' ? 'film' : 'music', 14))),
         h('div', { class: 'item-meta' },
           h('div', { class: 'item-name' }, it.name),
-          h('div', { class: 'muted small' }, `${fmt(it.dur)} · ${it.pos === 'start' ? 'always first' : it.pos === 'end' ? 'always last' : 'not used'}`),
+          h('div', { class: 'muted small' }, `${fmt(it.dur)} · default when exporting: ${it.pos === 'start' ? 'ticked, at start' : it.pos === 'end' ? 'ticked, at end' : 'not ticked'}`),
           seg),
         h('button', {
           class: 'icon-btn ghost', title: 'Delete',
@@ -163,6 +194,7 @@ export async function homeScreen(root) {
       h('section', { class: 'hero' },
         h('h1', null, 'Make explainer videos from your phone'),
         h('p', { class: 'muted' }, 'Add images → paste your script → record voice while you zoom, tick and circle → cut, add music, export.')),
+      updateCard,
       installCard,
       h('button', { class: 'btn primary big', onclick: newProject }, icon('plus'), 'New project'),
       h('h2', { class: 'section-title' }, 'Your projects'),
