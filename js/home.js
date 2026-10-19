@@ -85,8 +85,11 @@ export async function homeScreen(root) {
           const u = await checkForUpdate();
           if (!u) { location.reload(); return; }
           if (u.newer) { await openApkDownload(); toast(`Downloading build ${u.latest} — open it to update`, 5000); }
-          else toast('You have the latest version');
-        } catch { toast('Could not check — are you online?'); }
+          else toast(`You have the latest version (build ${u.current})`);
+        } catch (e) {
+          toast(`Could not check (${e.message}). Opening the download page…`, 4000);
+          openApkDownload();
+        }
         b.disabled = false; b.textContent = 'Check for update';
       },
     }, 'Check for update');
@@ -204,7 +207,8 @@ export async function homeScreen(root) {
           h('h2', null, icon('film', 18), 'Intro & outro'),
           h('span', { class: 'muted small' }, 'added to every video'),
           h('button', { class: 'btn small', onclick: addLibraryClip }, icon('plus', 16), 'Add clip')),
-        libList))));
+        libList),
+      h('div', { class: 'version-foot muted small' }, versionLabel(), ' · ', h('button', { class: 'link-btn', onclick: openSettings }, 'Check for update')))));
 
   await render();
   await renderLibrary();

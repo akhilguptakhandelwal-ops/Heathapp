@@ -404,3 +404,6 @@ canvas.tl { display: block; width: 100%; height: 222px; touch-action: none; curs
 .tool-big.danger { color: #f0a693; border-color: rgba(201, 74, 50, .55); background: rgba(201, 74, 50, .14); }
 .tool-big.armed { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .sel-bar .sel-info { text-align: left; font-size: 13px; color: var(--text); }
+
+.version-foot { text-align: center; padding: 8px 0 4px; }
+.link-btn { background: none; border: 0; color: var(--accent-2); font: inherit; text-decoration: underline; cursor: pointer; padding: 0; }
