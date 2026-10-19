@@ -127,17 +127,33 @@ export async function prepareImage(file, max = 2560) {
   return { blob, w: cw, h: ch };
 }
 
+// Running inside the Android app (Capacitor) instead of a browser?
+export const native = () => (window.Capacitor?.isNativePlatform?.() ? window.Capacitor : null);
+
+export async function lockOrientation(orientation) {
+  const so = native()?.Plugins?.ScreenOrientation;
+  if (so) { try { await so.lock({ orientation }); } catch { /* ignore */ } return; }
+  try { await screen.orientation?.lock?.(orientation); } catch { /* iOS etc. */ }
+}
+
+export async function unlockOrientation() {
+  const so = native()?.Plugins?.ScreenOrientation;
+  if (so) { try { await so.unlock(); } catch { /* ignore */ } return; }
+  try { screen.orientation?.unlock?.(); } catch { /* ignore */ }
+}
+
 export async function enterImmersive(orientation = 'landscape') {
+  if (native()) { await lockOrientation(orientation); return; }
   try {
     if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
       await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
     }
   } catch { /* not allowed here, fine */ }
-  try { await screen.orientation?.lock?.(orientation); } catch { /* iOS etc. */ }
+  await lockOrientation(orientation);
 }
 
 export async function exitImmersive() {
-  try { screen.orientation?.unlock?.(); } catch { /* ignore */ }
+  await unlockOrientation();
   try { if (document.fullscreenElement) await document.exitFullscreen(); } catch { /* ignore */ }
 }
 
@@ -145,7 +161,41 @@ export async function keepAwake() {
   try { return await navigator.wakeLock?.request('screen'); } catch { return null; }
 }
 
-export function downloadBlob(blob, name) {
+function base64Of(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+
+// Writes a blob to the phone's storage in pieces (big videos would not fit in one go).
+async function nativeWrite(blob, path, directory) {
+  const fs = native().Plugins.Filesystem;
+  const CHUNK = 3 * 1024 * 1024; // multiple of 3, so base64 pieces join cleanly
+  for (let off = 0; off < blob.size || off === 0; off += CHUNK) {
+    const data = await base64Of(blob.slice(off, off + CHUNK));
+    if (off === 0) await fs.writeFile({ path, data, directory, recursive: true });
+    else await fs.appendFile({ path, data, directory });
+    if (blob.size === 0) break;
+  }
+  return (await fs.getUri({ path, directory })).uri;
+}
+
+export async function downloadBlob(blob, name) {
+  if (native()) {
+    toast('Saving…', 8000);
+    for (const dir of ['DOCUMENTS', 'EXTERNAL']) {
+      try {
+        await nativeWrite(blob, `SlideVox/${name}`, dir);
+        toast(dir === 'DOCUMENTS' ? `Saved in Documents/SlideVox/${name}` : `Saved in the app's folder. Use Share to send it anywhere.`, 5000);
+        return true;
+      } catch (e) { console.error(e); }
+    }
+    toast('Could not save. Please use Share instead.', 4000);
+    return false;
+  }
   const url = URL.createObjectURL(blob);
   const a = h('a', { href: url, download: name });
   document.body.append(a);
@@ -155,6 +205,17 @@ export function downloadBlob(blob, name) {
 }
 
 export async function shareBlob(blob, name) {
+  if (native()) {
+    try {
+      toast('Preparing…', 8000);
+      const uri = await nativeWrite(blob, `share/${name}`, 'CACHE');
+      await native().Plugins.Share.share({ title: name, files: [uri], dialogTitle: 'Share video' });
+      return true;
+    } catch (e) {
+      if (!/cancel/i.test(String(e?.message))) { console.error(e); toast('Sharing failed — try Save', 3500); }
+      return false;
+    }
+  }
   const file = new File([blob], name, { type: blob.type });
   if (navigator.canShare?.({ files: [file] })) {
     try { await navigator.share({ files: [file], title: name }); return true; } catch { return false; }

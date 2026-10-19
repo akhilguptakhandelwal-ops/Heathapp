@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SlideVox</string>
+    <string name="title_activity_main">SlideVox</string>
+    <string name="package_name">com.slidevox.studio</string>
+    <string name="custom_url_scheme">com.slidevox.studio</string>
+</resources>

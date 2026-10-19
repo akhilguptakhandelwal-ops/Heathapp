@@ -125,7 +125,7 @@ export async function homeScreen(root) {
   }
 
   // "Install app" card: hidden once the app runs from the home screen.
-  const installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone || !!window.Capacitor?.isNativePlatform?.();
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const installCard = h('section', { class: 'card install-card' });
   function renderInstall() {

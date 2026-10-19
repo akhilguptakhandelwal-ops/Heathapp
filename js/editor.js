@@ -1,5 +1,5 @@
 // Editor: preview, timeline, cuts, voice/music volume, music, export.
-import { h, toast, fmt, clamp, uid, debounce, modal, promptBox, confirmBox, pickFiles, keepAwake, downloadBlob, shareBlob, extFor, enterImmersive, exitImmersive } from './util.js';
+import { h, toast, fmt, clamp, uid, debounce, modal, promptBox, confirmBox, pickFiles, keepAwake, downloadBlob, shareBlob, extFor, exitImmersive, lockOrientation } from './util.js';
 import { icon } from './icons.js';
 import { db, deleteRecording } from './db.js';
 import { Painter, Player } from './renderer.js';
@@ -288,7 +288,7 @@ export async function editorScreen(root, { recId }) {
     try {
       if (document.fullscreenElement) { await exitImmersive(); return; }
       await el.requestFullscreen?.();
-      await screen.orientation?.lock?.(vertical ? 'portrait' : 'landscape');
+      await lockOrientation(vertical ? 'portrait' : 'landscape');
     } catch { /* not supported */ }
     if (!playing) play();
   }
@@ -807,8 +807,8 @@ export async function editorScreen(root, { recId }) {
     video.playsInline = true;
     const playFull = async () => {
       try {
+        await lockOrientation(vertical ? 'portrait' : 'landscape');
         await (video.requestFullscreen?.() || video.webkitEnterFullscreen?.());
-        await screen.orientation?.lock?.(vertical ? 'portrait' : 'landscape');
       } catch { /* not supported */ }
       video.play().catch(() => {});
     };

@@ -1,0 +1,9 @@
+{
+  "appId": "com.slidevox.studio",
+  "appName": "SlideVox",
+  "webDir": "www",
+  "backgroundColor": "#14110e",
+  "android": {
+    "allowMixedContent": false
+  }
+}

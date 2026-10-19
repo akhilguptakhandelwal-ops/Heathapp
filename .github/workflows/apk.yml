@@ -1,0 +1,59 @@
+name: Build Android APK
+
+# Builds SlideVox.apk and attaches it to the "apk-latest" release, so the
+# newest app is always at:
+# https://github.com/<owner>/Heathapp/releases/download/apk-latest/SlideVox.apk
+on:
+  push:
+    branches: [main, claude/mobile-video-recording-editor-v4k8ae]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - name: Install and copy web app
+        run: |
+          npm ci
+          npm run build:www
+          npx cap sync android
+      - name: Build APK
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk ../SlideVox.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SlideVox-apk
+          path: SlideVox.apk
+      - name: Publish to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="SlideVox Android app — build ${{ github.run_number }} ($(git rev-parse --short HEAD)). Download SlideVox.apk below and open it on your phone to install."
+          if ! gh release view apk-latest >/dev/null 2>&1; then
+            gh release create apk-latest --title "SlideVox Android app" --notes "$NOTES" --target "$GITHUB_SHA" --latest
+          else
+            gh release edit apk-latest --notes "$NOTES" --latest
+          fi
+          gh release upload apk-latest SlideVox.apk --clobber

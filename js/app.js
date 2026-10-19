@@ -41,6 +41,8 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 window.addEventListener('appinstalled', () => { window.__installPrompt = null; window.dispatchEvent(new Event('install-ready')); });
 
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+const isNative = !!window.Capacitor?.isNativePlatform?.();
+if (isNative) document.documentElement.classList.add('native');
+if (!isNative && 'serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }

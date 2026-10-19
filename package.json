@@ -1,0 +1,20 @@
+{
+  "name": "slidevox-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SlideVox Studio — record explainer videos from images on your phone.",
+  "scripts": {
+    "build:www": "node scripts/build-www.mjs",
+    "sync": "npm run build:www && npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/filesystem": "8.1.4",
+    "@capacitor/screen-orientation": "8.0.2",
+    "@capacitor/share": "8.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2"
+  }
+}

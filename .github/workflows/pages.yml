@@ -21,14 +21,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Push site to gh-pages
         run: |
+          node scripts/build-www.mjs
+          touch www/.nojekyll
+          cd www
+          git init -q -b gh-pages
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout --orphan gh-pages-tmp
-          git rm -rf --cached .github >/dev/null
-          rm -rf .github
           git add -A
-          git commit -m "Publish ${GITHUB_SHA::7}"
-          git push -f origin gh-pages-tmp:gh-pages
+          git commit -qm "Publish ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" gh-pages
 
   deploy:
     runs-on: ubuntu-latest
@@ -43,8 +44,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - run: node scripts/build-www.mjs && touch www/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: www
       - id: deployment
         uses: actions/deploy-pages@v4
