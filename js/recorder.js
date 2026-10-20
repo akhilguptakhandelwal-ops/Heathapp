@@ -622,8 +622,17 @@ export async function recorderScreen(root, { projectId, appendId }) {
       body,
       h('div', { class: 'sp-note' }, 'Only you see this — not recorded'));
 
-    body.addEventListener('pointerdown', () => { touching = true; clearTimeout(touchTimer); });
+    let sw = null;
+    body.addEventListener('pointerdown', (e) => { touching = true; clearTimeout(touchTimer); sw = { x: e.clientX, y: e.clientY, t: performance.now() }; });
     const release = () => { clearTimeout(touchTimer); touchTimer = setTimeout(() => { touching = false; }, 700); };
+    // A quick sideways swipe on the script also changes the image.
+    body.addEventListener('pointerup', (e) => {
+      if (sw && settings.swipe) {
+        const dx = e.clientX - sw.x, dy = e.clientY - sw.y;
+        if (Math.abs(dx) > 70 && Math.abs(dy) < Math.abs(dx) * 0.6 && performance.now() - sw.t < 500) go(dx < 0 ? 1 : -1);
+      }
+      sw = null;
+    });
     body.addEventListener('pointerup', release);
     body.addEventListener('pointercancel', release);
     body.addEventListener('touchend', release);

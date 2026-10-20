@@ -1,0 +1,30 @@
+name: Feature check
+
+# Runs every feature of the app in a real browser (fake microphone).
+# Red here means something that used to work is broken.
+on:
+  push:
+    branches: [main, claude/mobile-video-recording-editor-v4k8ae]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Check every feature
+        env:
+          SHOTS_DIR: ${{ runner.temp }}/shots
+        run: npm test
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-screenshots
+          path: ${{ runner.temp }}/shots

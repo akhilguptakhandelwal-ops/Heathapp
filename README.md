@@ -43,3 +43,13 @@ Local testing: `npx http-server -p 8080` then open `http://localhost:8080`.
 - Export ke dauran screen on rakhein.
 
 Code: `js/recorder.js` (studio), `js/editor.js` (timeline), `js/export.js` (final video), `js/renderer.js` (stage drawing + replay), `js/mix.js` (cuts, volume, music mix), `js/media.js` (clips).
+
+## Feature list (har update mein sab chalu rehne chahiye)
+
+`npm test` (aur GitHub par "Feature check") inn sab ko asli browser mein chala kar check karta hai:
+
+- **Home:** projects, install card, version + update check, settings (swipe, background, countdown, auto-save), Intro & outro library (Start / End / Off)
+- **Project:** rename, images, video/audio clips, White/Black blank page, item menu (rotate, blank before/after, delete), ☰ drag order, sort, Select → Select all → multi delete, script + word count, 16:9 / 9:16
+- **Recorder:** record / pause / stop, countdown, teleprompter (speed, size, move, auto-scroll, hide), voice effect chips, pen, highlighter, line, arrow, circle, square, tick, cross, laser, colours, sizes, undo, delete all marks, zoom (pinch / wheel), pan, fit, rotate, swipe (pen flick, move tool, two fingers, on script), prev / next / arrow keys, + Page while recording with auto pen colour, clip auto-pause, continue recording
+- **Editor:** preview play, full-screen preview, timeline zoom / fit / tap / long-press select, Video / Voice / Music tracks, ✂ cut start/end, Delete, Volume, Undo / Redo / Restore, clip Skip / Include, voice effects + fine tune, voice volume, music (add, volume, start, loop, fade, priority, dip), rename / delete take
+- **Export:** Low / Medium / High / YouTube / 4K, saved clips at Start / After #N / End, fast encoder + real-time fallback, play full screen, Save (Documents/SlideVox), Share
