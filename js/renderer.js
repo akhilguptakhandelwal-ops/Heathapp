@@ -9,6 +9,7 @@ const COS_SIN = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 
 export function slideLite(s) {
   const o = { id: s.id, imageId: s.imageId, w: s.w, h: s.h, name: s.name };
+  if (s.blank) o.blank = s.blank;
   if (s.kind && s.kind !== 'image') Object.assign(o, { kind: s.kind, blobId: s.blobId, dur: s.dur, name: s.name });
   return o;
 }
@@ -78,6 +79,12 @@ export function applyEvent(st, ev) {
   if (!st) return st;
   switch (ev.k) {
     case 'slide':
+      st.i = ev.i;
+      st.v = { ...ev.v };
+      st.laser = null;
+      break;
+    case 'slides': // list changed while recording (e.g. a blank page was added)
+      st.slides = ev.slides.map((x) => ({ ...x }));
       st.i = ev.i;
       st.v = { ...ev.v };
       st.laser = null;

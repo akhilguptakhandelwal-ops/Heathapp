@@ -33,8 +33,9 @@ function slideRanges(events, D) {
       push(ev.t);
       slides = ev.st.slides;
       cur = slides[ev.st.i]?.id; n = ev.st.i + 1; start = ev.t;
-    } else if (ev.k === 'slide' && slides) {
+    } else if ((ev.k === 'slide' || ev.k === 'slides') && slides) {
       push(ev.t);
+      if (ev.k === 'slides') slides = ev.slides;
       cur = slides[ev.i]?.id; n = ev.i + 1; start = ev.t;
     }
   }

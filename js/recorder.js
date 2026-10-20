@@ -1,5 +1,6 @@
 // Full-screen landscape recording studio.
-import { h, toast, fmt, clamp, uid, r2, debounce, enterImmersive, exitImmersive, keepAwake } from './util.js';
+import { h, toast, fmt, clamp, uid, r2, debounce, enterImmersive, exitImmersive, keepAwake, modal } from './util.js';
+import { makeBlankPage, askBlankColor } from './media.js';
 import { icon } from './icons.js';
 import { db } from './db.js';
 import { settings, stageSize } from './settings.js';
@@ -135,6 +136,7 @@ export async function recorderScreen(root, { projectId, appendId }) {
     h('button', { class: 'rail-btn danger', title: 'Delete all marks', onclick: () => emit({ k: 'clear' }) }, icon('trash')),
     h('button', { class: 'rail-btn', title: 'Rotate image', onclick: rotate }, icon('rotate')),
     h('button', { class: 'rail-btn', title: 'Fit to screen', onclick: () => animateView(fitView(st.v.r)) }, icon('fit')),
+    h('button', { class: 'rail-btn page-btn', title: 'Add a blank page (white / black)', onclick: addPage }, icon('page')),
     scriptBtn);
 
   const rotateHint = h('div', { class: 'rotate-hint' },
@@ -194,6 +196,48 @@ export async function recorderScreen(root, { projectId, appendId }) {
     emit({ k: 'slide', i, v: fitView(rotOf(st.slides[i].id)) });
     updateCounter();
     syncClip();
+    syncPen();
+  }
+
+  // White page -> black pen, black page -> white pen; your colour comes back after.
+  let colorBeforeBlank = null;
+  function syncPen() {
+    const sl = st.slides[st.i];
+    if (sl?.blank) {
+      if (colorBeforeBlank == null) colorBeforeBlank = color;
+      const want = sl.blank === 'white' ? '#141210' : '#ffffff';
+      if (color !== want) setColor(want);
+      if (tool === 'move' || tool === 'laser') setTool('pen');
+    } else if (colorBeforeBlank != null) {
+      setColor(colorBeforeBlank);
+      colorBeforeBlank = null;
+    }
+  }
+
+  // Inserts a blank page right after the current one — also while recording.
+  async function addPage() {
+    closeFly();
+    const wasRunning = recording && !paused;
+    if (wasRunning) togglePause();
+    const c = await askBlankColor(modal, h);
+    if (c) {
+      const item = await makeBlankPage(c, vertical ? '9:16' : '16:9');
+      const at = st.i + 1;
+      const pIdx = project.slides.findIndex((x) => x.id === st.slides[st.i]?.id);
+      project.slides.splice(pIdx < 0 ? project.slides.length : pIdx + 1, 0, item);
+      project.updated = Date.now();
+      await db.put('projects', project);
+      await painter.cache.get(item.imageId);
+      const slides = st.slides.map((x) => ({ ...x }));
+      slides.splice(at, 0, slideLite(item));
+      cancelGesture();
+      emit({ k: 'slides', slides, i: at, v: fitView(0) });
+      updateCounter();
+      syncClip();
+      syncPen();
+      toast(c === 'white' ? 'White page added — pen is black' : 'Black page added — pen is white', 2200);
+    }
+    if (wasRunning && recording && paused) togglePause();
   }
 
   // On a video/audio clip the voice recording pauses; the clip plays at this
@@ -614,6 +658,7 @@ export async function recorderScreen(root, { projectId, appendId }) {
   await painter.ensure(st);
   updateCounter();
   syncClip();
+  syncPen();
   layout();
   let raf = 0, last = performance.now();
   const loop = (now) => {

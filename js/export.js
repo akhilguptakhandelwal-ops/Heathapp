@@ -30,7 +30,7 @@ export function insertionPoints(rec) {
   let slides = null, cur = null;
   for (const ev of rec.events) {
     let item = null;
-    if (ev.k === 'snap') { slides = ev.st.slides; item = slides[ev.st.i]; } else if (ev.k === 'slide' && slides) item = slides[ev.i];
+    if (ev.k === 'snap') { slides = ev.st.slides; item = slides[ev.st.i]; } else if (ev.k === 'slides') { slides = ev.slides; item = slides[ev.i]; } else if (ev.k === 'slide' && slides) item = slides[ev.i];
     else continue;
     if (item && item.id !== cur && isClip(item)) out.push({ t: ev.t, item, key: `${ev.t}|${item.id}` });
     cur = item?.id ?? null;
@@ -44,7 +44,7 @@ export function recordedSequence(rec) {
   const first = new Map();
   for (const ev of rec.events) {
     let item = null;
-    if (ev.k === 'snap') { slides = ev.st.slides; item = slides[ev.st.i]; } else if (ev.k === 'slide') item = slides[ev.i];
+    if (ev.k === 'snap') { slides = ev.st.slides; item = slides[ev.st.i]; } else if (ev.k === 'slides') { slides = ev.slides; item = slides[ev.i]; } else if (ev.k === 'slide') item = slides[ev.i];
     if (item && !first.has(item.id)) first.set(item.id, ev.t);
   }
   return { slides, first };

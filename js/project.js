@@ -1,7 +1,7 @@
-import { h, uid, debounce, promptBox, confirmBox, pickFiles, prepareImage, toast, fmt, enterImmersive } from './util.js';
+import { h, uid, debounce, promptBox, confirmBox, pickFiles, prepareImage, toast, fmt, enterImmersive, modal } from './util.js';
 import { icon } from './icons.js';
 import { db, blobsUsedBy, deleteRecording } from './db.js';
-import { importClip } from './media.js';
+import { importClip, makeBlankPage, askBlankColor } from './media.js';
 
 // Drag rows by their handle to reorder. Works with touch and mouse.
 export function makeSortable(list, onMove) {
@@ -80,6 +80,28 @@ export async function projectScreen(root, { projectId }) {
   const list = h('div', { class: 'item-list' });
   const recList = h('div', { class: 'rec-list' });
   const countEl = h('span', { class: 'muted small' });
+  // Multi-select (for deleting many items at once)
+  let selecting = false;
+  const picked = new Set();
+  const selectBtn = h('button', { class: 'btn small ghost', onclick: () => setSelecting(!selecting) }, icon('check', 16), 'Select');
+  const selBar = h('div', { class: 'multi-bar hidden' });
+  function setSelecting(on) {
+    selecting = on;
+    picked.clear();
+    selectBtn.classList.toggle('hidden', on);
+    renderItems();
+  }
+  function renderSelBar() {
+    selBar.classList.toggle('hidden', !selecting);
+    if (!selecting) return;
+    selBar.innerHTML = '';
+    const all = picked.size === p.slides.length && p.slides.length > 0;
+    selBar.append(
+      h('span', { class: 'grow' }, h('b', null, `${picked.size} selected`)),
+      h('button', { class: 'btn small', onclick: () => { if (all) picked.clear(); else p.slides.forEach((x) => picked.add(x.id)); renderItems(); } }, all ? 'Select none' : 'Select all'),
+      h('button', { class: 'btn small danger', disabled: !picked.size, onclick: deletePicked }, icon('trash', 16), 'Delete'),
+      h('button', { class: 'btn small ghost', onclick: () => setSelecting(false) }, 'Done'));
+  }
   const cta = h('button', { class: 'btn record big', onclick: startRecording }, icon('mic'), 'Create video & record voice');
   makeSortable(list, (from, to) => {
     const [s] = p.slides.splice(from, 1);
@@ -103,6 +125,8 @@ export async function projectScreen(root, { projectId }) {
 
   async function renderItems() {
     list.innerHTML = '';
+    list.classList.toggle('selecting', selecting);
+    renderSelBar();
     const imgs = p.slides.filter((s) => (s.kind || 'image') === 'image').length;
     const clips = p.slides.length - imgs;
     countEl.textContent = p.slides.length ? `${imgs} images${clips ? ` · ${clips} clips` : ''}` : '';
@@ -115,15 +139,38 @@ export async function projectScreen(root, { projectId }) {
       const s = p.slides[i];
       const kind = s.kind || 'image';
       const img = h('img', { src: await urlFor(s.imageId), alt: '', style: { transform: `rotate(${(s.rot || 0) * 90}deg)` } });
+      if (selecting) {
+        const on = picked.has(s.id);
+        list.append(h('div', {
+          class: `item-row kind-${kind} pickable ${on ? 'picked' : ''}`,
+          onclick: () => { if (picked.has(s.id)) picked.delete(s.id); else picked.add(s.id); renderItems(); },
+        },
+        h('span', { class: `pick-box ${on ? 'on' : ''}` }, on ? icon('check', 18) : null),
+        h('span', { class: 'item-no' }, String(i + 1)),
+        h('div', { class: 'item-thumb' }, img),
+        h('div', { class: 'item-meta' }, h('div', { class: 'item-name' }, s.name || `Image ${i + 1}`))));
+        continue;
+      }
       list.append(h('div', { class: `item-row kind-${kind}` },
         h('button', { class: 'drag-handle', title: 'Drag to reorder', 'aria-label': 'Drag to reorder' }, icon('grip', 22)),
         h('span', { class: 'item-no' }, String(i + 1)),
         h('div', { class: 'item-thumb' }, img, kind !== 'image' && h('span', { class: 'item-badge' }, icon(kind === 'video' ? 'film' : 'music', 14))),
         h('div', { class: 'item-meta' },
           h('div', { class: 'item-name' }, s.name || `Image ${i + 1}`),
-          h('div', { class: 'muted small' }, kind === 'image' ? `${s.w}×${s.h}` : `${KIND_LABEL[kind]} · ${fmt(s.dur)}`)),
-        kind === 'image' && h('button', { class: 'icon-btn ghost', title: 'Rotate', onclick: () => { s.rot = ((s.rot || 0) + 1) % 4; save(); renderItems(); } }, icon('rotate', 18)),
+          h('div', { class: 'muted small' }, s.blank ? 'Blank page' : kind === 'image' ? `${s.w}×${s.h}` : `${KIND_LABEL[kind]} · ${fmt(s.dur)}`)),
+        h('button', { class: 'icon-btn ghost', title: 'More', onclick: () => itemMenu(i) }, icon('more', 20)),
         h('button', { class: 'icon-btn ghost', title: 'Delete', onclick: () => removeItem(i) }, icon('trash', 18))));
+    }
+  }
+
+  // Frees the stored files of removed items unless a take still needs them.
+  async function cleanup(items) {
+    const recs = await db.byIndex('recordings', 'projectId', p.id);
+    const used = new Set();
+    recs.forEach((r) => blobsUsedBy(r).forEach((id) => used.add(id)));
+    for (const s of items) {
+      if (!used.has(s.imageId)) await db.delBlob(s.imageId);
+      if (s.blobId && !used.has(s.blobId)) await db.delBlob(s.blobId);
     }
   }
 
@@ -131,12 +178,44 @@ export async function projectScreen(root, { projectId }) {
     if (!(await confirmBox(`Remove item ${i + 1}?`, 'Remove'))) return;
     const [s] = p.slides.splice(i, 1);
     await saveNow();
-    const recs = await db.byIndex('recordings', 'projectId', p.id);
-    const used = new Set();
-    recs.forEach((r) => blobsUsedBy(r).forEach((id) => used.add(id)));
-    if (!used.has(s.imageId)) await db.delBlob(s.imageId);
-    if (s.blobId && !used.has(s.blobId)) await db.delBlob(s.blobId);
+    await cleanup([s]);
     renderItems();
+  }
+
+  async function deletePicked() {
+    const n = picked.size;
+    if (!n || !(await confirmBox(`Delete ${n} item${n > 1 ? 's' : ''}?`))) return;
+    const gone = p.slides.filter((x) => picked.has(x.id));
+    p.slides = p.slides.filter((x) => !picked.has(x.id));
+    await saveNow();
+    await cleanup(gone);
+    toast(`${n} item${n > 1 ? 's' : ''} deleted`);
+    setSelecting(false);
+  }
+
+  async function addBlank(at = p.slides.length) {
+    const color = await askBlankColor(modal, h);
+    if (!color) return;
+    const item = await makeBlankPage(color, p.aspect);
+    p.slides.splice(at, 0, item);
+    await saveNow();
+    toast(`${item.name} added at position ${at + 1}`);
+    renderItems();
+  }
+
+  function itemMenu(i) {
+    const s = p.slides[i];
+    // Each menu button closes the sheet, then runs its action.
+    const act = (fn) => (e) => { e.currentTarget.closest('.modal-wrap').querySelector('.modal-actions .btn').click(); fn(); };
+    modal({
+      title: `${i + 1}. ${s.name || 'Item'}`,
+      body: h('div', { class: 'menu-list' },
+        (s.kind || 'image') === 'image' && !s.blank && h('button', { class: 'btn', onclick: act(() => { s.rot = ((s.rot || 0) + 1) % 4; save(); renderItems(); }) }, icon('rotate', 18), 'Rotate'),
+        h('button', { class: 'btn', onclick: act(() => addBlank(i)) }, icon('page', 18), 'Add blank page before'),
+        h('button', { class: 'btn', onclick: act(() => addBlank(i + 1)) }, icon('page', 18), 'Add blank page after'),
+        h('button', { class: 'btn danger-soft', onclick: act(() => removeItem(i)) }, icon('trash', 18), 'Delete')),
+      buttons: [{ label: 'Close', value: null }],
+    });
   }
 
   async function addImages() {
@@ -261,19 +340,23 @@ export async function projectScreen(root, { projectId }) {
       title,
       h('span', { class: 'grow' })),
     h('main', { class: 'content' },
-      h('div', { class: 'add-row three' },
+      h('div', { class: 'add-row four' },
         h('button', { class: 'btn', onclick: addImages }, icon('image', 18), 'Images'),
         h('button', { class: 'btn', onclick: addClips }, icon('film', 18), 'Video / audio'),
+        h('button', { class: 'btn', onclick: () => addBlank() }, icon('page', 18), 'Blank page'),
         h('button', { class: 'btn', onclick: () => { scriptCard.scrollIntoView({ behavior: 'smooth' }); setTimeout(() => scriptArea.focus(), 300); } }, icon('text', 18), 'Script')),
       h('section', { class: 'card' },
         h('div', { class: 'card-head' },
           h('h2', null, icon('image', 18), 'Sequence'),
           countEl,
+          selectBtn,
           h('button', { class: 'btn small ghost', onclick: sortByName, title: 'Sort by file name' }, icon('sort', 16), 'Sort')),
+        selBar,
         list,
         h('div', { class: 'btn-row' },
           h('button', { class: 'btn small', onclick: addImages }, icon('plus', 16), 'Add images'),
-          h('button', { class: 'btn small', onclick: addClips }, icon('plus', 16), 'Add video / audio')),
+          h('button', { class: 'btn small', onclick: addClips }, icon('plus', 16), 'Add video / audio'),
+          h('button', { class: 'btn small', onclick: () => addBlank() }, icon('plus', 16), 'Blank page')),
         h('p', { class: 'muted small hint-line' }, 'Hold ☰ and drag to change the order. Video/audio clips play in the final video at the point you swipe to them while recording.')),
       scriptCard,
       h('section', { class: 'card' },

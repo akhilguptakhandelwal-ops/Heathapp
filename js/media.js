@@ -115,3 +115,32 @@ export async function importClip(file) {
   const imageId = await db.putBlob(card.blob);
   return { id: uid(), kind: 'audio', name: file.name, blobId, imageId, w: card.w, h: card.h, dur, rot: 0 };
 }
+
+// A plain white or black page (stored like an image).
+export async function makeBlankPage(color, aspect = '16:9') {
+  const w = aspect === '9:16' ? 1080 : 1920, h = aspect === '9:16' ? 1920 : 1080;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const c = cv.getContext('2d');
+  c.fillStyle = color === 'white' ? '#ffffff' : '#000000';
+  c.fillRect(0, 0, w, h);
+  const blob = await canvasBlob(cv, 'image/png');
+  const imageId = await db.putBlob(blob);
+  return { id: uid(), kind: 'image', blank: color, imageId, w, h, rot: 0, name: color === 'white' ? 'White page' : 'Black page' };
+}
+
+// Ask "White page or Black page?" — resolves 'white' | 'black' | null.
+export function askBlankColor(modal, h) {
+  const pick = (c) => () => c;
+  return modal({
+    title: 'Add a blank page',
+    body: h('div', { class: 'blank-pick' },
+      h('div', { class: 'blank-swatch white' }, h('b', null, 'White page'), h('span', null, 'Pen turns black')),
+      h('div', { class: 'blank-swatch black' }, h('b', null, 'Black page'), h('span', null, 'Pen turns white'))),
+    buttons: [
+      { label: 'Cancel', value: null },
+      { label: 'White page', kind: 'white-btn', value: pick('white') },
+      { label: 'Black page', kind: 'black-btn', value: pick('black') },
+    ],
+  });
+}

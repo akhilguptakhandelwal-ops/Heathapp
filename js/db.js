@@ -64,8 +64,9 @@ export async function askPersistentStorage() {
 export function blobsUsedBy(rec) {
   const ids = new Set();
   for (const ev of rec.events) {
-    if (ev.k !== 'snap') continue;
-    for (const s of ev.st.slides) { ids.add(s.imageId); if (s.blobId) ids.add(s.blobId); }
+    const list = ev.k === 'snap' ? ev.st.slides : ev.k === 'slides' ? ev.slides : null;
+    if (!list) continue;
+    for (const s of list) { ids.add(s.imageId); if (s.blobId) ids.add(s.blobId); }
   }
   return ids;
 }

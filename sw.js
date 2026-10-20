@@ -1,5 +1,5 @@
 // Offline support: network first, cached copy when offline.
-const CACHE = 'slidevox-v6';
+const CACHE = 'slidevox-v7';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/util.js', 'js/db.js', 'js/settings.js', 'js/icons.js', 'js/renderer.js',
