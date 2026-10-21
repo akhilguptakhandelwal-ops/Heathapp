@@ -71,37 +71,37 @@ final class InkView extends View {
 
     // ---- cursor
 
-    void placeCursorIfUnset(float x, float y) {
+    synchronized void placeCursorIfUnset(float x, float y) {
         if (cx < 0) moveCursor(x, y);
     }
 
-    void moveCursor(float x, float y) {
+    synchronized void moveCursor(float x, float y) {
         cx = x;
         cy = y;
         invalidate();
     }
 
-    float cursorX() {
+    synchronized float cursorX() {
         return cx;
     }
 
-    float cursorY() {
+    synchronized float cursorY() {
         return cy;
     }
 
     /** Finger is down in mouse mode: show a soft halo, no click happens. */
-    void setHolding(boolean h) {
+    synchronized void setHolding(boolean h) {
         holding = h;
         invalidate();
     }
 
-    void setScrolling(boolean s, float dy) {
+    synchronized void setScrolling(boolean s, float dy) {
         scrolling = s;
         scrollDy = dy;
         invalidate();
     }
 
-    void ripple(float x, float y) {
+    synchronized void ripple(float x, float y) {
         Ripple r = new Ripple();
         r.x = x;
         r.y = y;
@@ -112,7 +112,7 @@ final class InkView extends View {
 
     // ---- shapes
 
-    void begin(int type, int color, float x, float y) {
+    synchronized void begin(int type, int color, float x, float y) {
         current = new Shape();
         current.type = type;
         current.color = color;
@@ -121,14 +121,14 @@ final class InkView extends View {
         invalidate();
     }
 
-    void drag(float x, float y) {
+    synchronized void drag(float x, float y) {
         if (current == null) return;
         current.x2 = x;
         current.y2 = y;
         invalidate();
     }
 
-    void end() {
+    synchronized void end() {
         if (current == null) return;
         float dx = current.x2 - current.x1, dy = current.y2 - current.y1;
         if (Math.hypot(dx, dy) > 14 * dp) shapes.add(current);
@@ -136,23 +136,23 @@ final class InkView extends View {
         invalidate();
     }
 
-    void cancel() {
+    synchronized void cancel() {
         current = null;
         invalidate();
     }
 
-    void undo() {
+    synchronized void undo() {
         if (!shapes.isEmpty()) shapes.remove(shapes.size() - 1);
         invalidate();
     }
 
-    void clear() {
+    synchronized void clear() {
         shapes.clear();
         current = null;
         invalidate();
     }
 
-    void reset() {
+    synchronized void reset() {
         clear();
         ripples.clear();
         cx = cy = -1;
@@ -166,12 +166,22 @@ final class InkView extends View {
         getLocationOnScreen(loc);
         c.save();
         c.translate(-loc[0], -loc[1]);
+        boolean animating = drawContent(c);
+        c.restore();
+        if (animating) postInvalidateOnAnimation();
+    }
+
+    /**
+     * Draws marks, ripples and the cursor in screen coordinates. Also called
+     * from the recorder's render thread to paint them straight into the video.
+     * Returns true while a ripple is still animating.
+     */
+    synchronized boolean drawContent(Canvas c) {
         for (int i = 0; i < shapes.size(); i++) drawShape(c, shapes.get(i));
         if (current != null) drawShape(c, current);
         boolean animating = drawRipples(c);
         drawCursor(c);
-        c.restore();
-        if (animating) postInvalidateOnAnimation();
+        return animating;
     }
 
     private void drawShape(Canvas c, Shape s) {

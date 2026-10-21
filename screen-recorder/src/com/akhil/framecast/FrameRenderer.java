@@ -32,6 +32,12 @@ public final class FrameRenderer {
     private final Paint lensRing = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Matrix matrix = new Matrix();
     private Bitmap shaderBitmap;
+    private final android.graphics.Path screenClip = new android.graphics.Path();
+
+    /** Things drawn on top of the screen image, in real screen pixels. */
+    public interface Marks {
+        void draw(Canvas c);
+    }
     private BitmapShader shader;
 
     public FrameRenderer(int outW, int outH, int phone, int background) {
@@ -64,6 +70,8 @@ public final class FrameRenderer {
         RectF body = new RectF(screen.left - b, screen.top - b, screen.right + b, screen.bottom + b);
         float bodyRadius = 0.135f * Math.min(body.width(), body.height());
         screenRadius = Math.max(4, bodyRadius - b * 0.95f);
+        screenClip.reset();
+        screenClip.addRoundRect(screen, screenRadius, screenRadius, android.graphics.Path.Direction.CW);
         boolean portrait = sH >= sW;
         camR = 0.022f * Math.min(sW, sH);
         if (portrait) {
@@ -148,6 +156,14 @@ public final class FrameRenderer {
      * only its top-left capW x capH part is shown.
      */
     public void draw(Canvas c, Bitmap shot, int shotW, int shotH) {
+        draw(c, shot, shotW, shotH, null, 0, 0);
+    }
+
+    /**
+     * Same, then {@code marks} (arrows, boxes, cursor) on top of the screen.
+     * {@code screenW} x {@code screenH} is the real screen size the marks use.
+     */
+    public void draw(Canvas c, Bitmap shot, int shotW, int shotH, Marks marks, float screenW, float screenH) {
         c.drawBitmap(base, 0, 0, null);
         if (shot != null && !shot.isRecycled() && shotW > 0 && shotH > 0) {
             if (shot != shaderBitmap) {
@@ -159,6 +175,14 @@ public final class FrameRenderer {
             matrix.postTranslate(screen.left, screen.top);
             shader.setLocalMatrix(matrix);
             c.drawRoundRect(screen, screenRadius, screenRadius, shotPaint);
+        }
+        if (marks != null && screenW > 0 && screenH > 0) {
+            c.save();
+            c.clipPath(screenClip);
+            c.translate(screen.left, screen.top);
+            c.scale(screen.width() / screenW, screen.height() / screenH);
+            marks.draw(c);
+            c.restore();
         }
         // Punch-hole camera.
         c.drawCircle(camX, camY, camR, black);

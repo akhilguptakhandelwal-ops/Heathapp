@@ -40,7 +40,7 @@ final class OverlayController {
     private final Handler h = new Handler(Looper.getMainLooper());
     private final float dp;
 
-    private InkView ink;
+    private volatile InkView ink;
     private View touch;          // same window as ink
     private LinearLayout panel, tools, mouseGroup;
     private TextView timer;
@@ -96,6 +96,7 @@ final class OverlayController {
             wm.addView(ink, touchLp);
             wm.addView(panel, panelLp);
             shown = true;
+            h.post(trackPanel);
             touchable = false;
             setMode(NONE);
             DisplayMetrics m = svc.getResources().getDisplayMetrics();
@@ -107,6 +108,7 @@ final class OverlayController {
 
     void hide() {
         h.removeCallbacksAndMessages(null);
+        panelRect = null;
         removeQuietly(panel);
         removeQuietly(ink);
         panel = null;
@@ -124,6 +126,36 @@ final class OverlayController {
             wm.removeViewImmediate(v);
         } catch (Throwable ignored) {
         }
+    }
+
+    // ------------------------------------------------- recording helpers
+
+    /** Panel position on screen {left, top, right, bottom}, or null. Read by the render thread. */
+    private volatile int[] panelRect;
+
+    int[] panelRect() {
+        return panelRect;
+    }
+
+    /** Keeps {@link #panelRect} current (it moves when dragged, folded or the phone turns). */
+    private final Runnable trackPanel = new Runnable() {
+        @Override
+        public void run() {
+            LinearLayout p = panel;
+            if (!shown || p == null) return;
+            if (p.isAttachedToWindow() && p.getWidth() > 0) {
+                int[] l = new int[2];
+                p.getLocationOnScreen(l);
+                panelRect = new int[]{l[0], l[1], l[0] + p.getWidth(), l[1] + p.getHeight()};
+            }
+            h.postDelayed(this, 60);
+        }
+    };
+
+    /** Draws the marks and cursor (screen coordinates) onto a video frame. Any thread. */
+    void drawMarks(Canvas c) {
+        InkView i = ink;
+        if (i != null) i.drawContent(c);
     }
 
     boolean canClick() {

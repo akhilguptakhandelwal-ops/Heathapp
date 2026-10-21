@@ -21,7 +21,7 @@ Dono ka package same hai — Full, normal wale ke upar install ho jata hai.
 | Colour, Undo, Clear | Arrow/box ka rang, last hatao, sab hatao |
 | ■ | Stop — video Gallery → Movies/FrameCast mein |
 
-Jo tool chalu hai use dobara dabao to tool band aur phone normal chalta hai. Timer kheench ke panel upar-neeche, timer par tap = panel chhota.
+**Panel video mein nahi aata** — sirf screen, arrows, boxes aur cursor record hote hain. Jo tool chalu hai use dobara dabao to tool band aur phone normal chalta hai. Timer kheench ke panel upar-neeche, timer par tap = panel chhota.
 
 ## Setup on the phone
 
@@ -35,6 +35,7 @@ Jo tool chalu hai use dobara dabao to tool band aur phone normal chalta hai. Tim
 - `RecorderService` — MediaProjection mirrors the screen into an `ImageReader` at exactly the size of the phone screen in the frame. Every 1/30 s, `FrameRenderer` draws background + phone + latest screen image onto the H.264 encoder's input surface. Mic audio goes to AAC; both go into one MP4 (`MuxerSink`).
 - `OverlayController` — two overlay windows: a full-screen layer (arrows, boxes, cursor; takes touches only while a tool is on) and the button panel. Normal APK: "display over other apps" windows, the full-screen one at 80% opacity because Android 12+ only lets taps pass through windows up to that. Full APK: accessibility overlays, and clicks / scrolls are sent with `dispatchGesture` at the cursor (`ControlService`); the layer steps aside for that moment so the tap reaches the app below.
 - Normal vs Full: same code; `build.sh FULL=1` adds `manifest-full-service.xml` to the manifest.
+- Panel kept out of the video: `PanelMask` fills the panel's area in every captured image by stretching the screen next to it (median of a few columns, so thin text/lines don't streak). Then `FrameRenderer` paints the marks and cursor from `InkView` straight into the frame, so marks under the panel stay, at full colour.
 - `MouseGesture` — tap vs hold vs drag vs two-finger scroll rules.
 
 ## Build

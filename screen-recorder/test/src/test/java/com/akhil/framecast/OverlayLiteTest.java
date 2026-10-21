@@ -205,24 +205,50 @@ public class OverlayLiteTest {
         ink.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
         ink.layout(0, 0, w, h);
+        c.saveLayerAlpha(0, 0, w, h, 204);   // lite windows are 80% opaque
         ink.draw(c);
+        c.restore();
         View panel = field("panel");
         panel.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         panel.layout(0, 0, panel.getMeasuredWidth(), panel.getMeasuredHeight());
         assertTrue(panel.getMeasuredWidth() > 100);
+        int px = w - panel.getMeasuredWidth() - 18, py = 380;
         c.save();
-        c.translate(w - panel.getMeasuredWidth() - 18, 380);
+        c.translate(px, py);
         panel.draw(c);
         c.restore();
+        int[] panelRect = {px, py, px + panel.getMeasuredWidth(), py + panel.getMeasuredHeight()};
         Shots.save(live, "lite_live_screen.png");
 
         FrameRenderer fr = new FrameRenderer(1080, 1920, 0, 0);
         fr.layout(w / (float) h);
-        Bitmap scaled = Bitmap.createScaledBitmap(live, fr.capW, fr.capH, true);
+        // Same steps as RecorderService: capture -> hide panel -> frame + marks.
+        Bitmap scaled = Bitmap.createScaledBitmap(live, fr.capW, fr.capH, true).copy(Bitmap.Config.ARGB_8888, true);
+        float sx = fr.capW / (float) w, sy = fr.capH / (float) h;
+        PanelMask.apply(scaled, fr.capW, fr.capH, panelRect, sx, sy, 9 * sx);
         Bitmap out = Bitmap.createBitmap(1080, 1920, Bitmap.Config.ARGB_8888);
-        fr.draw(new Canvas(out), scaled, fr.capW, fr.capH);
+        FrameRenderer.Marks marks = new FrameRenderer.Marks() {
+            @Override
+            public void draw(Canvas cc) {
+                o.drawMarks(cc);
+            }
+        };
+        fr.draw(new Canvas(out), scaled, fr.capW, fr.capH, marks, w, h);
         Shots.save(out, "lite_video_frame.png");
+
+        RectF s = fr.screenRect();
+        float k = s.width() / w;
+        // Panel is gone: its amber "selected" button and red stop button are nowhere in its area.
+        for (int y = panelRect[1]; y < panelRect[3]; y += 3) {
+            for (int x = panelRect[0]; x < panelRect[2]; x += 3) {
+                int p = out.getPixel((int) (s.left + x * k), (int) (s.top + y * k));
+                assertTrue("panel visible at " + x + "," + y, Shots.dist(p, Ui.AMBER) > 60);
+            }
+        }
+        // The box edge that was under the panel is still in the video, in full colour.
+        int edge = out.getPixel((int) (s.left + 990 * k), (int) (s.top + 820 * k));
+        assertTrue("box edge under the panel missing", Shots.dist(edge, Ui.INK[0]) < 60);
         touch(MotionEvent.ACTION_UP, t + 900, 430, 1330);
     }
 }

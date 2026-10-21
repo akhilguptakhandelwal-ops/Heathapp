@@ -64,7 +64,17 @@ public class RecorderService extends Service {
     private Handler render;
 
     private Prefs prefs;
-    private OverlayController overlay;
+    private volatile OverlayController overlay;
+    private volatile int screenW, screenH;
+
+    /** Arrows, boxes and cursor, painted straight into the video. */
+    private final FrameRenderer.Marks marks = new FrameRenderer.Marks() {
+        @Override
+        public void draw(Canvas c) {
+            OverlayController o = overlay;
+            if (o != null) o.drawMarks(c);
+        }
+    };
     private MediaProjection projection;
     private boolean micWanted;
     private volatile boolean stopping;
@@ -182,7 +192,7 @@ public class RecorderService extends Service {
                     Bitmap out = null;
                     try {
                         out = Bitmap.createBitmap(fr.outW, fr.outH, Bitmap.Config.ARGB_8888);
-                        fr.draw(new Canvas(out), shot, shotW, shotH);
+                        fr.draw(new Canvas(out), shot, shotW, shotH, marks, screenW, screenH);
                         String name = "FrameCast_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".png";
                         Saver.savePng(RecorderService.this, out, name);
                         msg = "Screenshot saved: Pictures/FrameCast";
@@ -240,6 +250,8 @@ public class RecorderService extends Service {
         if (stopping || projection == null) return;
         try {
             Point real = realSize();
+            screenW = real.x;
+            screenH = real.y;
             float aspect = real.x / (float) real.y;
             lastPortrait = real.y >= real.x;
             if (!setupEncoder(prefs.outputSize(false), aspect) && !setupEncoder(prefs.outputSize(true), aspect)) {
@@ -361,6 +373,7 @@ public class RecorderService extends Service {
                     scratch.limit(need);
                     shot.copyPixelsFromBuffer(scratch);
                 }
+                hidePanel(w, h);
                 shotW = w;
                 shotH = h;
             } catch (Throwable ignored) {
@@ -369,6 +382,18 @@ public class RecorderService extends Service {
             }
         }
     };
+
+    /** Paints over the tool panel so it never shows in the video. */
+    private void hidePanel(int w, int h) {
+        OverlayController o = overlay;
+        if (o == null || screenW <= 0 || screenH <= 0) return;
+        float sx = w / (float) screenW, sy = h / (float) screenH;
+        float pad = 3 * getResources().getDisplayMetrics().density * sx;
+        try {
+            PanelMask.apply(shot, w, h, o.panelRect(), sx, sy, pad);
+        } catch (Throwable ignored) {
+        }
+    }
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -402,7 +427,7 @@ public class RecorderService extends Service {
             }
         }
         try {
-            fr.draw(c, shot, shotW, shotH);
+            fr.draw(c, shot, shotW, shotH, marks, screenW, screenH);
         } catch (Throwable ignored) {
         } finally {
             try {
@@ -418,6 +443,8 @@ public class RecorderService extends Service {
             boolean portrait = p.y >= p.x;
             if (portrait == lastPortrait) return;
             lastPortrait = portrait;
+            screenW = p.x;
+            screenH = p.y;
             fr.layout(p.x / (float) p.y);
             ImageReader nr = newReader(fr.capW, fr.capH);
             vd.resize(fr.capW, fr.capH, dpi);
