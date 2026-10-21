@@ -8,7 +8,7 @@ import android.graphics.RectF;
 /** Small hand-drawn icons for the tool panel (no icon font, no emoji). */
 final class Icons {
     static final int ARROW = 1, SQUARE = 2, MOUSE = 3, CLICK = 4, UP = 5, DOWN = 6,
-            UNDO = 7, CLEAR = 8, STOP = 9, COLOR = 10, HIDE = 11;
+            UNDO = 7, CLEAR = 8, STOP = 9, COLOR = 10, HIDE = 11, CAMERA = 12;
 
     private static final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private static final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -96,6 +96,16 @@ final class Icons {
                 c.drawCircle(cx, cy, 7 * u, fill);
                 stroke.setStrokeWidth(1.6f * u);
                 c.drawCircle(cx, cy, 9.5f * u, stroke);
+                break;
+            case CAMERA:
+                r.set(x0 + 3.5f * u, y0 + 7 * u, x0 + 20.5f * u, y0 + 19 * u);
+                c.drawRoundRect(r, 2.5f * u, 2.5f * u, stroke);
+                path.moveTo(x0 + 8.5f * u, y0 + 7 * u);
+                path.lineTo(x0 + 10 * u, y0 + 4.5f * u);
+                path.lineTo(x0 + 14 * u, y0 + 4.5f * u);
+                path.lineTo(x0 + 15.5f * u, y0 + 7 * u);
+                c.drawPath(path, stroke);
+                c.drawCircle(cx, y0 + 13 * u, 3.4f * u, stroke);
                 break;
             case HIDE:
                 path.moveTo(x0 + 9 * u, y0 + 6 * u);

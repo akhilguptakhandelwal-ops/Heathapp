@@ -8,21 +8,26 @@ import android.provider.Settings;
 import android.view.accessibility.AccessibilityEvent;
 
 /**
- * Accessibility service: owns the on-screen cursor, drawing layer and tool
- * panel, and performs taps / swipes where the cursor is.
+ * Accessibility service, only in the "Full" APK. When it is on, the tool
+ * overlay uses it to tap and scroll at the cursor in other apps.
  */
 public class ControlService extends AccessibilityService {
     static volatile ControlService instance;
-    private OverlayController overlay;
 
-    static OverlayController overlay() {
-        ControlService s = instance;
-        return s == null ? null : s.overlay;
+    /** True when this build declares the service (the "Full" APK). */
+    static boolean isDeclared(Context c) {
+        try {
+            c.getPackageManager().getServiceInfo(new ComponentName(c, ControlService.class), 0);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** True when the service is switched on and connected. */
     static boolean isOn(Context c) {
         if (instance != null) return true;
+        if (!isDeclared(c)) return false;
         String on = Settings.Secure.getString(c.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
         if (on == null) return false;
         String me = new ComponentName(c, ControlService.class).flattenToString();
@@ -36,9 +41,7 @@ public class ControlService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
-        overlay = new OverlayController(this);
         instance = this;
-        if (RecorderService.running) overlay.show();
     }
 
     @Override
@@ -62,7 +65,6 @@ public class ControlService extends AccessibilityService {
     }
 
     private void cleanup() {
-        if (overlay != null) overlay.hide();
         instance = null;
     }
 }

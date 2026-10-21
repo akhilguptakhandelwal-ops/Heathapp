@@ -20,27 +20,32 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /**
- * The three overlay windows shown while recording:
+ * The two overlay windows shown while recording:
  * <ol>
- *   <li>ink   – draws arrows, boxes and the cursor; never takes touches</li>
- *   <li>touch – catches the finger only while a tool is selected</li>
+ *   <li>ink   – full screen; draws arrows, boxes and the cursor, and catches
+ *       the finger only while a tool is selected</li>
  *   <li>panel – the button column on the right edge</li>
  * </ol>
+ * With the accessibility service ({@code a11y != null}) mouse taps and scrolls
+ * really reach the app below. Without it the windows are ordinary
+ * "display over other apps" windows and the cursor is for showing only.
  */
 final class OverlayController {
     static final int NONE = 0, ARROW = 1, SQUARE = 2, MOUSE = 3;
 
-    private final AccessibilityService svc;
+    private final Context svc;
+    private final AccessibilityService a11y;
+    private final int windowType;
     private final WindowManager wm;
     private final Handler h = new Handler(Looper.getMainLooper());
     private final float dp;
 
     private InkView ink;
-    private View touch;
+    private View touch;          // same window as ink
     private LinearLayout panel, tools, mouseGroup;
     private TextView timer;
     private Btn bArrow, bSquare, bMouse, bColor;
-    private WindowManager.LayoutParams inkLp, touchLp, panelLp;
+    private WindowManager.LayoutParams touchLp, panelLp;
 
     private boolean shown, collapsed, gestureBusy, touchable;
     private int mode = NONE;
@@ -48,8 +53,11 @@ final class OverlayController {
     private final MouseGesture mouse;
     private final int[] loc = new int[2];
 
-    OverlayController(AccessibilityService s) {
+    OverlayController(Context s, AccessibilityService a11y) {
         svc = s;
+        this.a11y = a11y;
+        windowType = a11y != null ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+                : WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         wm = (WindowManager) s.getSystemService(Context.WINDOW_SERVICE);
         dp = Ui.dp(s, 1);
         mouse = new MouseGesture(ViewConfiguration.get(s).getScaledTouchSlop());
@@ -60,7 +68,7 @@ final class OverlayController {
     private WindowManager.LayoutParams fullScreen(boolean canTouch) {
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                windowType,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
@@ -73,6 +81,11 @@ final class OverlayController {
                     : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         }
         if (Build.VERSION.SDK_INT >= 30) lp.setFitInsetsTypes(0);
+        if (a11y == null && Build.VERSION.SDK_INT >= 31) {
+            // Android 12+ only lets taps pass through another app's window when
+            // it is at most 80% opaque.
+            lp.alpha = 0.8f;
+        }
         return lp;
     }
 
@@ -80,8 +93,7 @@ final class OverlayController {
         if (shown) return;
         try {
             build();
-            wm.addView(ink, inkLp);
-            wm.addView(touch, touchLp);
+            wm.addView(ink, touchLp);
             wm.addView(panel, panelLp);
             shown = true;
             touchable = false;
@@ -96,7 +108,6 @@ final class OverlayController {
     void hide() {
         h.removeCallbacksAndMessages(null);
         removeQuietly(panel);
-        removeQuietly(touch);
         removeQuietly(ink);
         panel = null;
         touch = null;
@@ -113,6 +124,17 @@ final class OverlayController {
             wm.removeViewImmediate(v);
         } catch (Throwable ignored) {
         }
+    }
+
+    boolean canClick() {
+        return a11y != null;
+    }
+
+    /** Ripple in the middle of the screen, so a screenshot is noticed. */
+    void flash() {
+        if (ink == null) return;
+        ink.ripple(svc.getResources().getDisplayMetrics().widthPixels / 2f,
+                svc.getResources().getDisplayMetrics().heightPixels / 2f);
     }
 
     void setTimer(String text, boolean live) {
@@ -138,7 +160,7 @@ final class OverlayController {
         bArrow.setOn(m == ARROW);
         bSquare.setOn(m == SQUARE);
         bMouse.setOn(m == MOUSE);
-        mouseGroup.setVisibility(m == MOUSE && !collapsed ? View.VISIBLE : View.GONE);
+        mouseGroup.setVisibility(m == MOUSE && !collapsed && canClick() ? View.VISIBLE : View.GONE);
         if (m == MOUSE) {
             DisplayMetrics dm = svc.getResources().getDisplayMetrics();
             ink.placeCursorIfUnset(dm.widthPixels / 2f, dm.heightPixels / 2f);
@@ -155,9 +177,7 @@ final class OverlayController {
     private void build() {
         Context c = svc;
         ink = new InkView(c);
-        inkLp = fullScreen(false);
-
-        touch = new View(c);
+        touch = ink;
         touch.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent e) {
@@ -234,6 +254,13 @@ final class OverlayController {
         });
 
         addDivider(tools);
+        addBtn(tools, Icons.CAMERA, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                RecorderService r = RecorderService.instance;
+                if (r != null) r.screenshot();
+            }
+        });
         bColor = addBtn(tools, Icons.COLOR, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -267,7 +294,7 @@ final class OverlayController {
 
         panelLp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                windowType,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT);
         panelLp.gravity = Gravity.TOP | Gravity.END;
@@ -297,7 +324,7 @@ final class OverlayController {
     private void setCollapsed(boolean c) {
         collapsed = c;
         tools.setVisibility(c ? View.GONE : View.VISIBLE);
-        mouseGroup.setVisibility(mode == MOUSE && !c ? View.VISIBLE : View.GONE);
+        mouseGroup.setVisibility(mode == MOUSE && !c && canClick() ? View.VISIBLE : View.GONE);
     }
 
     /** Drag the timer to move the panel up / down; tap it to fold the panel. */
@@ -438,6 +465,7 @@ final class OverlayController {
     private void tap(float x, float y) {
         if (gestureBusy) return;
         ink.ripple(x, y);
+        if (a11y == null) return;   // no accessibility: the click is only shown
         Path p = new Path();
         p.moveTo(Math.max(0, x), Math.max(0, y));
         run(p, 60);
@@ -445,7 +473,7 @@ final class OverlayController {
 
     /** Finger swipe starting at (x, y) moving by {@code dy}. */
     private void swipe(float x, float y, float dy) {
-        if (gestureBusy) return;
+        if (gestureBusy || a11y == null) return;
         DisplayMetrics m = svc.getResources().getDisplayMetrics();
         float h = Math.max(m.heightPixels, 1);
         float margin = 12 * dp;
@@ -478,7 +506,7 @@ final class OverlayController {
                     GestureDescription g = new GestureDescription.Builder()
                             .addStroke(new GestureDescription.StrokeDescription(p, 0, duration))
                             .build();
-                    sent = svc.dispatchGesture(g, new AccessibilityService.GestureResultCallback() {
+                    sent = a11y.dispatchGesture(g, new AccessibilityService.GestureResultCallback() {
                         @Override
                         public void onCompleted(GestureDescription d) {
                             gestureDone();

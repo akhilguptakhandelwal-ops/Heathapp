@@ -29,8 +29,9 @@ public class MainActivity extends Activity {
 
     private Prefs prefs;
     private PreviewView preview;
-    private TextView a11yPill, notifPill, micPill, startBtn, lastTitle, lastSub;
+    private TextView overlayPill, a11yPill, notifPill, micPill, startBtn, lastTitle, lastSub;
     private View notifRow, lastCard;
+    private boolean full;
     private boolean pendingStart, skipTools;
     private float dp;
 
@@ -39,6 +40,7 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         prefs = new Prefs(this);
         dp = Ui.dp(this, 1);
+        full = ControlService.isDeclared(this);
         setContentView(build());
     }
 
@@ -125,8 +127,17 @@ public class MainActivity extends Activity {
         // Setup
         col.addView(section("Setup (ek baar)"));
         LinearLayout setup = card();
+        overlayPill = pill();
+        setup.addView(row("Tools har screen ke upar",
+                "\"Display over other apps\" mein FrameCast ko Allow karein. Isse arrow, square, cursor aur panel har app ke upar dikhte hain.",
+                overlayPill, new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        openOverlaySettings();
+                    }
+                }));
         a11yPill = pill();
-        setup.addView(row("Cursor aur tools",
+        if (full) setup.addView(row("Asli click aur scroll",
                 "Accessibility → Installed apps → FrameCast cursor and tools → On.\nAgar \"Restricted setting\" likha aaye: App info → ⋮ (upar right) → Allow restricted settings, phir dobara On karein.",
                 a11yPill, new View.OnClickListener() {
                     @Override
@@ -135,6 +146,7 @@ public class MainActivity extends Activity {
                     }
                 }));
         TextView appInfo = text("App info kholein", 13, 700, Ui.AMBER);
+        appInfo.setVisibility(full ? View.VISIBLE : View.GONE);
         appInfo.setPadding(0, (int) (2 * dp), 0, (int) (12 * dp));
         appInfo.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -209,8 +221,11 @@ public class MainActivity extends Activity {
                 {"Arrow", "Arrow button dabao, screen par ungli kheencho — jahan chhodoge wahan arrow ki nok banegi."},
                 {"Square", "Square button dabao aur kheencho — box ban jayega."},
                 {"Mouse", "Angootha ghumao — cursor saath chalega. Ungli uthao — cursor wahin ruk jayega."},
-                {"Click", "Jaldi se tap = wahan click. Daba ke rakho = sirf cursor ghoomega, click nahi hoga. Panel ka ◎ button = cursor ki jagah click."},
-                {"Scroll", "Mouse mode mein do ungliyon se upar / neeche kheencho, ya panel ke ⌃ ⌄ button dabao."},
+                full ? new String[]{"Click", "Jaldi se tap = wahan click. Daba ke rakho = sirf cursor ghoomega, click nahi hoga. Panel ka ◎ button = cursor ki jagah click."}
+                        : new String[]{"Click", "Jaldi se tap = video mein click ka nishaan. App ko asli mein chalane ke liye Mouse button dobara dabao (tool band) aur normal tap karo — cursor wahin dikhta rahega."},
+                full ? new String[]{"Scroll", "Mouse mode mein do ungliyon se upar / neeche kheencho, ya panel ke ⌃ ⌄ button dabao."}
+                        : new String[]{"Scroll", "Tool band karke normal scroll karein — recording chalti rahegi."},
+                {"Screenshot", "Camera button = phone frame ke saath photo, Gallery → Pictures/FrameCast."},
                 {"Phone normal", "Jo tool chalu hai use dobara dabao — tool band, phone normal chalega."},
                 {"Panel", "Upar timer ko kheench kar panel upar-neeche karo. Timer par tap = panel chhota / bada."},
                 {"Stop", "Laal ■ button ya notification ka Stop. Video Gallery → Movies/FrameCast mein save hogi."},
@@ -347,6 +362,7 @@ public class MainActivity extends Activity {
     }
 
     private void refresh() {
+        setPill(overlayPill, Settings.canDrawOverlays(this), "Allowed", "Allow");
         setPill(a11yPill, ControlService.isOn(this), "On", "Turn on");
         if (Build.VERSION.SDK_INT >= 33) {
             notifRow.setVisibility(View.VISIBLE);
@@ -385,14 +401,14 @@ public class MainActivity extends Activity {
             if (r != null) r.requestStop();
             return;
         }
-        if (!skipTools && !ControlService.isOn(this)) {
+        if (!skipTools && !ControlService.isOn(this) && !Settings.canDrawOverlays(this)) {
             new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
-                    .setTitle("Cursor aur tools band hain")
-                    .setMessage("Cursor, click, scroll, arrow aur square ke liye Accessibility mein \"FrameCast cursor and tools\" On karein.")
+                    .setTitle("Tools band hain")
+                    .setMessage("Arrow, square, cursor aur panel ke liye \"Display over other apps\" mein FrameCast ko Allow karein.")
                     .setPositiveButton("Settings kholo", new android.content.DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(android.content.DialogInterface d, int w) {
-                            openAccessibility();
+                            openOverlaySettings();
                         }
                     })
                     .setNegativeButton("Bina tools ke record", new android.content.DialogInterface.OnClickListener() {
@@ -473,6 +489,14 @@ public class MainActivity extends Activity {
         }
         Toast.makeText(this, "3 second mein recording shuru", Toast.LENGTH_SHORT).show();
         moveTaskToBack(true);
+    }
+
+    private void openOverlaySettings() {
+        try {
+            startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
+        } catch (Throwable t) {
+            openAppInfo();
+        }
     }
 
     private void openAccessibility() {

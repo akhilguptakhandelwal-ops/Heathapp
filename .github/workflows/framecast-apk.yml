@@ -1,6 +1,6 @@
 name: FrameCast APK
 
-# Builds the FrameCast screen recorder and attaches it to the
+# Builds the FrameCast screen recorder (normal + Full) and attaches them to the
 # "framecast-latest" release:
 # https://github.com/<owner>/Heathapp/releases/download/framecast-latest/FrameCast.apk
 on:
@@ -42,18 +42,22 @@ jobs:
         run: |
           screen-recorder/build.sh
           cp screen-recorder/build/FrameCast.apk FrameCast.apk
+          FULL=1 screen-recorder/build.sh
+          cp screen-recorder/build/FrameCast-Full.apk FrameCast-Full.apk
       - uses: actions/upload-artifact@v4
         with:
           name: FrameCast-apk
-          path: FrameCast.apk
+          path: |
+            FrameCast.apk
+            FrameCast-Full.apk
       - name: Publish to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          NOTES="FrameCast screen recorder — build ${{ github.run_number }} ($(git rev-parse --short HEAD)). Download FrameCast.apk on your phone and open it to install."
+          NOTES="FrameCast screen recorder — build ${{ github.run_number }} ($(git rev-parse --short HEAD)). FrameCast.apk installs normally. FrameCast-Full.apk adds real click/scroll in other apps but Play Protect blocks it unless Play Protect scanning is turned off while installing."
           if ! gh release view framecast-latest >/dev/null 2>&1; then
             gh release create framecast-latest --title "FrameCast screen recorder" --notes "$NOTES" --target "$GITHUB_SHA" --latest=false
           else
             gh release edit framecast-latest --notes "$NOTES"
           fi
-          gh release upload framecast-latest FrameCast.apk --clobber
+          gh release upload framecast-latest FrameCast.apk FrameCast-Full.apk --clobber

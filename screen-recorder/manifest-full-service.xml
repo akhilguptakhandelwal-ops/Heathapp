@@ -1,0 +1,15 @@
+<!-- Added to AndroidManifest.xml only for FrameCast-Full.apk (build.sh FULL=1).
+     Play Protect blocks side-loaded apps that declare an accessibility service,
+     so the normal APK leaves it out. -->
+        <service
+            android:name=".ControlService"
+            android:exported="true"
+            android:label="@string/a11y_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_config" />
+        </service>

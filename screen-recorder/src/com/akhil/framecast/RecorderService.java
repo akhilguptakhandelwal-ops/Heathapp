@@ -30,6 +30,7 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.view.Display;
 import android.view.Surface;
@@ -63,6 +64,7 @@ public class RecorderService extends Service {
     private Handler render;
 
     private Prefs prefs;
+    private OverlayController overlay;
     private MediaProjection projection;
     private boolean micWanted;
     private volatile boolean stopping;
@@ -149,10 +151,57 @@ public class RecorderService extends Service {
         projection.registerCallback(projectionCallback, main);
         running = true;
         stopping = false;
-        OverlayController o = ControlService.overlay();
-        if (o != null) o.show();
+        overlay = makeOverlay();
+        if (overlay != null) overlay.show();
         countdown(3);
         return START_NOT_STICKY;
+    }
+
+    /**
+     * Tools panel + cursor. Uses the accessibility service when it is on (real
+     * clicks and scrolls), otherwise a normal "display over other apps" overlay.
+     */
+    private OverlayController makeOverlay() {
+        ControlService a = ControlService.instance;
+        if (a != null) return new OverlayController(a, a);
+        if (Settings.canDrawOverlays(this)) return new OverlayController(this, null);
+        return null;
+    }
+
+    // ----------------------------------------------------------- screenshot
+
+    /** Saves the current frame (phone frame included) as a PNG. Any thread. */
+    void screenshot() {
+        render.post(new Runnable() {
+            @Override
+            public void run() {
+                String msg;
+                if (!capturing || fr == null || shot == null || shotW == 0) {
+                    msg = "Recording shuru hone ke baad screenshot lein";
+                } else {
+                    Bitmap out = null;
+                    try {
+                        out = Bitmap.createBitmap(fr.outW, fr.outH, Bitmap.Config.ARGB_8888);
+                        fr.draw(new Canvas(out), shot, shotW, shotH);
+                        String name = "FrameCast_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".png";
+                        Saver.savePng(RecorderService.this, out, name);
+                        msg = "Screenshot saved: Pictures/FrameCast";
+                    } catch (Throwable t) {
+                        msg = "Screenshot save nahi hua: " + t.getMessage();
+                    } finally {
+                        if (out != null) out.recycle();
+                    }
+                }
+                final String m = msg;
+                main.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        Toast.makeText(RecorderService.this, m, Toast.LENGTH_SHORT).show();
+                        if (overlay != null) overlay.flash();
+                    }
+                });
+            }
+        });
     }
 
     private final MediaProjection.Callback projectionCallback = new MediaProjection.Callback() {
@@ -166,7 +215,7 @@ public class RecorderService extends Service {
 
     private void countdown(final int n) {
         if (!running || stopping) return;
-        OverlayController o = ControlService.overlay();
+        OverlayController o = overlay;
         if (n <= 0) {
             if (o != null) o.setTimer("REC", true);
             render.post(new Runnable() {
@@ -417,7 +466,7 @@ public class RecorderService extends Service {
         public void run() {
             if (!running || stopping || startedAt == 0) return;
             long s = (SystemClock.elapsedRealtime() - startedAt) / 1000;
-            OverlayController o = ControlService.overlay();
+            OverlayController o = overlay;
             if (o != null) o.setTimer(String.format(Locale.US, "%02d:%02d", s / 60, s % 60), true);
             main.postDelayed(this, 500);
         }
@@ -435,7 +484,7 @@ public class RecorderService extends Service {
                     return;
                 }
                 stopping = true;
-                OverlayController o = ControlService.overlay();
+                OverlayController o = overlay;
                 if (o != null) o.setTimer("Saving", false);
                 render.post(new Runnable() {
                     @Override
@@ -536,8 +585,9 @@ public class RecorderService extends Service {
         running = false;
         stopping = false;
         main.removeCallbacks(timerUpdater);
-        OverlayController o = ControlService.overlay();
+        OverlayController o = overlay;
         if (o != null) o.hide();
+        overlay = null;
         stopForegroundCompat();
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
         if (saved) notifySaved(msg);
@@ -556,8 +606,9 @@ public class RecorderService extends Service {
         } catch (Throwable ignored) {
         }
         projection = null;
-        OverlayController o = ControlService.overlay();
+        OverlayController o = overlay;
         if (o != null) o.hide();
+        overlay = null;
         stopForegroundCompat();
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
         stopSelf();

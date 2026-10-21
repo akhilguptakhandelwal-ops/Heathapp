@@ -55,6 +55,44 @@ final class Saver {
         return uri;
     }
 
+    static Uri savePng(Context ctx, android.graphics.Bitmap bmp, String name) throws Exception {
+        ContentResolver cr = ctx.getContentResolver();
+        if (Build.VERSION.SDK_INT >= 29) {
+            ContentValues v = new ContentValues();
+            v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+            v.put(MediaStore.MediaColumns.MIME_TYPE, "image/png");
+            v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/" + FOLDER);
+            v.put(MediaStore.MediaColumns.IS_PENDING, 1);
+            Uri uri = cr.insert(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), v);
+            if (uri == null) throw new IllegalStateException("Gallery refused the file");
+            OutputStream out = cr.openOutputStream(uri);
+            try {
+                bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out);
+            } finally {
+                if (out != null) out.close();
+            }
+            v.clear();
+            v.put(MediaStore.MediaColumns.IS_PENDING, 0);
+            cr.update(uri, v, null, null);
+            return uri;
+        }
+        File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), FOLDER);
+        //noinspection ResultOfMethodCallIgnored
+        dir.mkdirs();
+        File dst = new File(dir, name);
+        OutputStream out = new FileOutputStream(dst);
+        try {
+            bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out);
+        } finally {
+            out.close();
+        }
+        ContentValues v = new ContentValues();
+        v.put(MediaStore.MediaColumns.DATA, dst.getAbsolutePath());
+        v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+        v.put(MediaStore.MediaColumns.MIME_TYPE, "image/png");
+        return cr.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, v);
+    }
+
     private static void copy(InputStream in, OutputStream out) throws Exception {
         try {
             byte[] buf = new byte[1 << 16];

@@ -1,7 +1,6 @@
 package com.akhil.framecast;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -49,8 +48,7 @@ public class OverlayTest {
         svc.onServiceConnected();
         shadow = shadowOf(svc);
         shadow.setCanDispatchGestures(true);
-        o = ControlService.overlay();
-        assertNotNull(o);
+        o = new OverlayController(svc, svc);
         o.show();
         t = SystemClock.uptimeMillis();
     }
@@ -271,10 +269,10 @@ public class OverlayTest {
         }
         assertEquals(3, shapes());
         LinearLayout tools = field("tools");
-        // tools: arrow, square, mouse, mouseGroup, divider, colour, undo, clear, divider, stop
-        tools.getChildAt(6).performClick();
-        assertEquals(2, shapes());
+        // tools: arrow, square, mouse, mouseGroup, divider, camera, colour, undo, clear, divider, stop
         tools.getChildAt(7).performClick();
+        assertEquals(2, shapes());
+        tools.getChildAt(8).performClick();
         assertEquals(0, shapes());
     }
 
