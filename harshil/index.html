@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#16120f">
+<title>Harshil – Voice Studio</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&family=Tiro+Devanagari+Hindi&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #16120f; --surface: #1f1a16; --surface-2: #29231d; --surface-3: #352d25;
+  --line: #3d342a; --text: #f2ebe0; --muted: #a89c8a; --faint: #716757;
+  --accent: #c8893e; --accent-2: #e2ad66; --ink: #1c1309;
+  --olive: #8c9a6a; --rust: #b8573a; --radius: 16px;
+  --font: 'Manrope', 'Tiro Devanagari Hindi', ui-sans-serif, system-ui, sans-serif;
+  --display: 'Fraunces', Georgia, serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text); font-family: var(--font);
+  font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+button, input, textarea { font: inherit; color: inherit; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 18px 16px 80px; }
+header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.logo { width: 46px; height: 46px; border-radius: 14px; background: var(--accent); color: var(--ink); display: grid; place-items: center; font-family: var(--display); font-size: 26px; font-weight: 700; flex: none; }
+h1 { font-family: var(--display); font-size: 28px; margin: 0; line-height: 1.1; }
+.sub { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
+.gear { margin-left: auto; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; width: 42px; height: 42px; cursor: pointer; font-size: 18px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
+.card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin: 0 0 12px; font-weight: 700; }
+.versions { display: grid; gap: 10px; }
+.ver { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; align-items: center; text-align: left; border: 1px solid var(--line); background: var(--surface-2); border-radius: 14px; padding: 14px; cursor: pointer; }
+.ver.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.ver.soon { opacity: .5; cursor: default; }
+.ver .tag, .ver b, .ver span.d { grid-column: 1; }
+.ver .tag { font-size: 11px; font-weight: 800; letter-spacing: .08em; color: var(--accent-2); text-transform: uppercase; }
+.ver b { display: block; font-size: 16px; font-family: var(--display); font-weight: 600; }
+.ver span.d { display: block; font-size: 13px; color: var(--muted); }
+.ver .play { grid-row: 1 / span 3; grid-column: 2; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--accent); color: var(--ink); font-size: 15px; cursor: pointer; }
+.ver .play.playing { background: var(--rust); color: var(--text); }
+label.f { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
+input[type=password], textarea { width: 100%; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; outline: none; }
+input:focus, textarea:focus { border-color: var(--accent); }
+textarea { min-height: 220px; resize: vertical; font-size: 16px; line-height: 1.65; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row > .grow { flex: 1; min-width: 0; }
+.btn { color: var(--text); text-decoration: none; display: inline-block; border: 1px solid var(--line); background: var(--surface-2); padding: 10px 14px; border-radius: 12px; cursor: pointer; font-weight: 600; }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--ink); }
+.btn.big { width: 100%; padding: 16px; font-size: 16px; font-weight: 800; }
+.hint { font-size: 12.5px; color: var(--faint); margin: 8px 0 0; }
+.hint a { color: var(--accent-2); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 7px 12px; cursor: pointer; font-size: 13.5px; }
+.chip:active { background: var(--surface-3); }
+.chip small { color: var(--faint); font-family: ui-monospace, monospace; font-size: 11px; margin-left: 4px; }
+.count { font-size: 12px; color: var(--faint); display: flex; justify-content: space-between; margin-top: 4px; }
+.count button { background: none; border: 0; color: var(--accent-2); cursor: pointer; font-size: 12px; padding: 0; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.scale { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.status { font-size: 13.5px; color: var(--muted); min-height: 20px; margin: 10px 0 0; }
+.status.err { color: var(--rust); }
+.status.ok { color: var(--olive); }
+.out { display: grid; gap: 10px; }
+.clip { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.clip p { margin: 0 0 8px; font-size: 13px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.clip p b { color: var(--accent-2); font-weight: 700; }
+.clip audio { width: 100%; height: 40px; }
+.clip .row { margin-top: 6px; }
+.clip .btn { padding: 7px 11px; font-size: 13px; }
+.empty { color: var(--faint); font-size: 13px; margin: 0; }
+.hidden { display: none !important; }
+dialog { background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; width: min(520px, calc(100% - 32px)); }
+dialog::backdrop { background: rgba(10, 8, 6, .7); }
+dialog h3 { font-family: var(--display); margin: 0 0 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">H</div>
+    <div>
+      <h1>Harshil</h1>
+      <p class="sub">One voice. Every emotion.</p>
+    </div>
+    <button class="gear" id="openSettings" title="Settings">⚙</button>
+  </header>
+
+  <section class="card">
+    <h2>Versions</h2>
+    <div class="versions" id="versions"></div>
+    <p class="hint">▶ dabakar har version ka sample suniye. Version chunne par uska style aur example script editor mein aa jata hai.</p>
+  </section>
+
+  <section class="card">
+    <h2>Script</h2>
+    <div class="chips" id="chips"></div>
+    <label class="f" for="text">Text (English, Hindi, Hinglish)</label>
+    <textarea id="text"></textarea>
+    <div class="count"><span id="count">0 characters</span><button id="loadExample">Example script daalo</button></div>
+    <label class="f">Emotion range</label>
+    <input type="range" id="stab" min="0" max="2" step="1" value="0">
+    <div class="scale"><span>Creative (most emotion)</span><span>Natural</span><span>Steady</span></div>
+    <button class="btn primary big" id="go" style="margin-top:14px">▶ Harshil, bolo</button>
+    <div class="status" id="status"></div>
+  </section>
+
+  <section class="card">
+    <h2>Recordings</h2>
+    <div class="out" id="out"><p class="empty">Abhi kuch nahi bana.</p></div>
+  </section>
+</div>
+
+<dialog id="settings">
+  <h3>Settings</h3>
+  <p class="hint" style="margin-top:0">Harshil ki awaaz ElevenLabs se banti hai. Apni API key ek baar daaliye — yeh sirf is phone mein save hoti hai.</p>
+  <label class="f" for="key">ElevenLabs API key</label>
+  <input id="key" type="password" placeholder="sk_..." autocomplete="off">
+  <p class="hint">Key yahan banaiye: <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noopener">elevenlabs.io → Settings → API keys</a>. “Text to Speech” permission on rakhein.</p>
+  <div class="row" style="margin-top:14px; justify-content:flex-end">
+    <button class="btn" id="closeSettings">Close</button>
+    <button class="btn primary" id="saveSettings">Save</button>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('harshil.' + k); return v == null ? d : v; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('harshil.' + k, v); } catch {} },
+  };
+
+  // Harshil's voice (ElevenLabs voice library).
+  const VOICE_ID = 'iF4EGhdPrfeyzQw30TZJ';
+  const API = 'https://api.elevenlabs.io/v1';
+
+  // Each version is a character style for the same voice. Add new ones here.
+  const VERSIONS = [
+    {
+      id: 'v1', tag: 'Version 1', name: 'The Common Man',
+      desc: 'Everyday stories — laughs, tears, anger, whispers.',
+      sample: 'samples/v1-common-man.mp3', stability: 0,
+      chips: [
+        ['😄 Laugh', 'laughs'], ['🤣 Big laugh', 'laughs harder'], ['🤭 Chuckle', 'chuckles'],
+        ['🤩 Excited', 'excited'], ['😢 Sad', 'sad'], ['😭 Crying', 'crying'],
+        ['😠 Angry', 'angry'], ['📢 Shout', 'shouting'], ['🤫 Whisper', 'whispers'],
+        ['😮‍💨 Sigh', 'sighs'], ['😲 Surprised', 'surprised'], ['😏 Sarcastic', 'sarcastic'],
+        ['🤗 Warm', 'warmly'], ['🎙 Deep', 'deep voice'], ['🐢 Slow', 'slowly'], ['⏸ Pause', 'pause'],
+      ],
+      example: `[excited] Okay, listen… I'm about to tell you the funniest story of my life! [laughs] My dad was teaching me to ride a scooter for the very first time… and I went straight… into the neighbour's buffalo! [laughs harder]
+[sad] [slowly] But… today, that same scooter just sits in the corner of the house… and Dad… isn't here anymore. [sighs]
+[angry] And the day someone told me to sell it for scrap… I said it straight — NO! That scooter is going NOWHERE!
+[whispers] Every night… I quietly run my hand over its seat…
+[deep voice] [slowly] Because some things… are not just things.
+[warmly] [chuckles] And yes… that buffalo still changes its path when it sees me!`,
+    },
+    {
+      id: 'v2', tag: 'Version 2', name: 'War History Explainer',
+      desc: 'YouTube-style deep dives into battles and wars.',
+      sample: 'samples/v2-war-history.mp3', stability: 0,
+      chips: [
+        ['🤔 Curious hook', 'curious'], ['🧐 Serious', 'serious'], ['🎭 Dramatic', 'dramatically'],
+        ['⚡ Urgent', 'urgently'], ['🔥 Intense', 'intense'], ['😢 Sad', 'sad'],
+        ['🤫 Whisper', 'whispers'], ['🎙 Deep', 'deep voice'], ['🐢 Slow', 'slowly'],
+        ['🗣 Shout', 'shouting'], ['😲 Gasp', 'gasps'], ['🤗 Warm', 'warmly'],
+        ['⏸ Pause', 'pause'], ['⏸⏸ Long pause', 'long pause'],
+      ],
+      example: `[curious] [softly] Imagine this. 12 September, 1897. A tiny mud-brick post… on a ridge in the North-West Frontier. [pause] Its name? Saragarhi.
+[serious] Inside… just twenty-one soldiers of the 36th Sikhs. Outside… [slowly] an estimated TEN THOUSAND tribesmen.
+[dramatically] Now, here's the part most textbooks skip. Saragarhi wasn't really a fort. It was a signal post — men flashing sunlight with mirrors, passing messages between two bigger forts. Lose Saragarhi… and both those forts go blind.
+[urgently] The attack begins in the morning. Wave after wave. They breach a wall. They set fires. And every single time… the twenty-one push them back!
+[sad] [slowly] But one by one… they fall. The story goes that the last man at the signals, Gurmukh Singh, sends one final message…
+[whispers] he asks permission… to put down the mirror… and pick up his rifle.
+[deep voice] Twenty-one men. Hours of resistance. Not one of them surrendered.
+[warmly] And that, my friends… is why the Indian Army still remembers Saragarhi every 12th of September. [pause] In the next episode… we go even deeper.`,
+    },
+    { id: 'v3', tag: 'Version 3', name: 'Coming soon', desc: 'Next character yahan aayega.', soon: true },
+  ];
+
+  const state = { ver: store.get('ver', 'v1'), busy: false };
+  const status = (msg, kind = '') => { const s = $('#status'); s.textContent = msg; s.className = 'status ' + kind; };
+  const current = () => VERSIONS.find((v) => v.id === state.ver) || VERSIONS[0];
+
+  // ---------- Versions ----------
+  let player = null, playingBtn = null;
+  function stopSample() {
+    if (player) player.pause();
+    if (playingBtn) { playingBtn.textContent = '▶'; playingBtn.classList.remove('playing'); }
+    player = null; playingBtn = null;
+  }
+  function renderVersions() {
+    const box = $('#versions');
+    box.innerHTML = '';
+    for (const v of VERSIONS) {
+      const el = document.createElement('div');
+      el.className = 'ver' + (v.id === state.ver ? ' on' : '') + (v.soon ? ' soon' : '');
+      el.innerHTML = `<span class="tag"></span>${v.sample ? '<button class="play" title="Sample">▶</button>' : ''}<b></b><span class="d"></span>`;
+      el.querySelector('.tag').textContent = v.tag;
+      el.querySelector('b').textContent = v.name;
+      el.querySelector('.d').textContent = v.desc;
+      if (!v.soon) el.onclick = () => selectVersion(v.id);
+      const play = el.querySelector('.play');
+      if (play) play.onclick = (ev) => {
+        ev.stopPropagation();
+        if (playingBtn === play) return stopSample();
+        stopSample();
+        player = new Audio(v.sample);
+        player.onended = stopSample;
+        player.play().catch(() => status('Sample nahi chal paya.', 'err'));
+        playingBtn = play; play.textContent = '■'; play.classList.add('playing');
+      };
+      box.appendChild(el);
+    }
+  }
+  function selectVersion(id) {
+    const changed = id !== state.ver;
+    state.ver = id; store.set('ver', id);
+    const v = current();
+    renderVersions(); renderChips();
+    $('#stab').value = v.stability;
+    if (changed && (!text.value.trim() || confirm(`"${v.name}" ka example script editor mein daalein? (Abhi wala text hat jayega)`))) {
+      text.value = v.example; updateCount();
+    }
+  }
+
+  // ---------- Emotion chips ----------
+  function renderChips() {
+    const box = $('#chips');
+    box.innerHTML = '';
+    for (const [label, tag] of current().chips) {
+      const b = document.createElement('button');
+      b.className = 'chip'; b.type = 'button';
+      b.innerHTML = `${label}<small>[${tag}]</small>`;
+      b.onclick = () => insertTag(tag);
+      box.appendChild(b);
+    }
+  }
+  function insertTag(tag) {
+    const s = text.selectionStart ?? text.value.length, e = text.selectionEnd ?? s;
+    const before = text.value.slice(0, s), after = text.value.slice(e);
+    const ins = `${before && !/\s$/.test(before) ? ' ' : ''}[${tag}] `;
+    text.value = before + ins + after;
+    const pos = before.length + ins.length;
+    text.focus(); text.setSelectionRange(pos, pos);
+    updateCount();
+  }
+
+  // ---------- Text ----------
+  const text = $('#text');
+  text.value = store.get('text', '') || current().example;
+  function updateCount() {
+    $('#count').textContent = `${text.value.length.toLocaleString('en-IN')} characters`;
+    store.set('text', text.value);
+  }
+  text.addEventListener('input', updateCount);
+  $('#loadExample').onclick = () => {
+    if (text.value.trim() && !confirm('Example script daalein? Abhi wala text hat jayega.')) return;
+    text.value = current().example; updateCount();
+  };
+  $('#stab').onchange = () => store.set('stab', $('#stab').value);
+  $('#stab').value = store.get('stab', '0');
+
+  // ---------- Settings ----------
+  const dlg = $('#settings');
+  $('#openSettings').onclick = () => { $('#key').value = store.get('key', ''); dlg.showModal(); };
+  $('#closeSettings').onclick = () => dlg.close();
+  $('#saveSettings').onclick = () => { store.set('key', $('#key').value.trim()); dlg.close(); status('Key save ho gayi.', 'ok'); };
+
+  // ---------- Speech ----------
+  async function apiError(res) {
+    let detail = '';
+    try { const j = await res.json(); detail = j?.detail?.message || j?.detail?.status || (typeof j?.detail === 'string' ? j.detail : ''); } catch {}
+    if (res.status === 401) return 'API key galat hai ya permission kam hai. ⚙ Settings mein check karein.';
+    if (res.status === 402 || /quota|credit/i.test(detail)) return 'ElevenLabs credits khatam ho gaye. ' + detail;
+    if (res.status === 429) return 'Bahut zyada requests — thodi der baad try karein.';
+    if (/voice/i.test(detail) && res.status === 404) return 'Harshil ki awaaz aapke account mein nahi mili. ElevenLabs Voice Library se “Harish - Storytelling & Narration” ko My Voices mein add karein.';
+    return `ElevenLabs error ${res.status}. ${detail}`;
+  }
+
+  function chunks(str, max = 2000) {
+    const out = []; let rest = str.trim();
+    while (rest.length > max) {
+      const slice = rest.slice(0, max);
+      let cut = Math.max(slice.lastIndexOf('\n'), slice.lastIndexOf('. '), slice.lastIndexOf('! '), slice.lastIndexOf('? '), slice.lastIndexOf('।'));
+      if (cut < max * 0.5) cut = slice.lastIndexOf(' ');
+      if (cut < 1) cut = max - 1;
+      out.push(rest.slice(0, cut + 1).trim());
+      rest = rest.slice(cut + 1).trim();
+    }
+    if (rest) out.push(rest);
+    return out;
+  }
+
+  // Newest model first; fall back if the account cannot use it.
+  const MODELS = ['eleven_v4', 'eleven_v3'];
+  async function tts(part, key) {
+    let lastErr;
+    for (const model of MODELS) {
+      const res = await fetch(`${API}/text-to-speech/${VOICE_ID}?output_format=mp3_44100_128`, {
+        method: 'POST',
+        headers: { 'xi-api-key': key, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
+        body: JSON.stringify({ text: part, model_id: model, voice_settings: { stability: [0, 0.5, 1][+$('#stab').value] ?? 0 } }),
+      });
+      if (res.ok) return res.blob();
+      lastErr = await apiError(res);
+      if (![400, 404, 422].includes(res.status) || /voice/i.test(lastErr)) break;
+    }
+    throw new Error(lastErr);
+  }
+
+  async function speak(str) {
+    const key = store.get('key', '');
+    if (!key) { dlg.showModal(); throw new Error('Pehle ⚙ Settings mein ElevenLabs API key daalein.'); }
+    const parts = chunks(str), blobs = [];
+    for (let i = 0; i < parts.length; i++) {
+      status(parts.length > 1 ? `Harshil bol raha hai… (${i + 1}/${parts.length})` : 'Harshil bol raha hai…');
+      blobs.push(await tts(parts[i], key));
+    }
+    return new Blob(blobs, { type: 'audio/mpeg' });
+  }
+
+  // ---------- Recordings ----------
+  const results = [];
+  function renderResults() {
+    const out = $('#out');
+    out.innerHTML = '';
+    if (!results.length) { out.innerHTML = '<p class="empty">Abhi kuch nahi bana.</p>'; return; }
+    results.forEach((r, idx) => {
+      const el = document.createElement('div');
+      el.className = 'clip';
+      el.innerHTML = `<p><b></b> · <span></span></p><audio controls preload="metadata"></audio>
+        <div class="row"><a class="btn" download>⬇ Save MP3</a><button class="btn" data-share>Share</button><button class="btn" data-del>Delete</button></div>`;
+      el.querySelector('b').textContent = r.ver;
+      el.querySelector('p span').textContent = r.str;
+      el.querySelector('audio').src = r.url;
+      const a = el.querySelector('a'); a.href = r.url; a.download = r.file;
+      el.querySelector('[data-del]').onclick = () => { URL.revokeObjectURL(r.url); results.splice(idx, 1); renderResults(); };
+      el.querySelector('[data-share]').onclick = async () => {
+        const file = new File([r.blob], r.file, { type: 'audio/mpeg' });
+        try {
+          if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: 'Harshil' });
+          else a.click();
+        } catch {}
+      };
+      out.appendChild(el);
+    });
+  }
+
+  $('#go').onclick = async () => {
+    if (state.busy) return;
+    const str = text.value.trim();
+    if (!str) { status('Pehle script likhiye.', 'err'); text.focus(); return; }
+    state.busy = true; $('#go').disabled = true;
+    try {
+      const blob = await speak(str);
+      const v = current();
+      results.unshift({ blob, url: URL.createObjectURL(blob), str, ver: v.name, file: `harshil-${v.id}-${Date.now()}.mp3` });
+      renderResults();
+      $('#out audio')?.play().catch(() => {});
+      status('Ho gaya! Neeche suniye ya Save kariye.', 'ok');
+    } catch (e) {
+      status(/Failed to fetch/.test(e.message) ? 'Internet problem. Dobara try karein.' : e.message, 'err');
+    } finally { state.busy = false; $('#go').disabled = false; }
+  };
+
+  renderVersions(); renderChips(); updateCount();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>

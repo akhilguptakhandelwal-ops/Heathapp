@@ -1,0 +1,10 @@
+{
+  "name": "Harshil – Voice Studio",
+  "short_name": "Harshil",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#16120f",
+  "theme_color": "#16120f",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
