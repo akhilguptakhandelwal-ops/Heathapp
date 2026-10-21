@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FrameCast</string>
+    <string name="a11y_label">FrameCast cursor and tools</string>
+    <string name="a11y_desc">Recording ke time screen par cursor, arrow aur square dikhata hai, aur cursor se click / scroll karta hai. Ye kuch bhi padhta ya save nahi karta.</string>
+</resources>

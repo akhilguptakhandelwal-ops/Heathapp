@@ -1,0 +1,59 @@
+name: FrameCast APK
+
+# Builds the FrameCast screen recorder and attaches it to the
+# "framecast-latest" release:
+# https://github.com/<owner>/Heathapp/releases/download/framecast-latest/FrameCast.apk
+on:
+  push:
+    branches: [main, claude/mobile-frame-screen-recorder-8ovlmu]
+    paths: ['screen-recorder/**', '.github/workflows/framecast-apk.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: framecast-apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+          cache-dependency-path: screen-recorder/test/pom.xml
+      - name: Install Android build tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q aapt dalvik-exchange zipalign apksigner
+      - name: Tests (frame drawing, cursor, click, scroll, arrow, square)
+        run: screen-recorder/test/run-tests.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FrameCast-screenshots
+          path: screen-recorder/test/target/shots
+      - name: Build APK
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          screen-recorder/build.sh
+          cp screen-recorder/build/FrameCast.apk FrameCast.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FrameCast-apk
+          path: FrameCast.apk
+      - name: Publish to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES="FrameCast screen recorder — build ${{ github.run_number }} ($(git rev-parse --short HEAD)). Download FrameCast.apk on your phone and open it to install."
+          if ! gh release view framecast-latest >/dev/null 2>&1; then
+            gh release create framecast-latest --title "FrameCast screen recorder" --notes "$NOTES" --target "$GITHUB_SHA" --latest=false
+          else
+            gh release edit framecast-latest --notes "$NOTES"
+          fi
+          gh release upload framecast-latest FrameCast.apk --clobber

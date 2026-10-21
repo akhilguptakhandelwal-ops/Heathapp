@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Robolectric checks for FrameCast: renders the phone frame, panel and
+     main screen to PNGs and drives the mouse-mode touch logic.
+     Run with ./run-tests.sh (it builds the resource apk first). -->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.akhil</groupId>
+  <artifactId>framecast-tests</artifactId>
+  <version>1</version>
+  <properties>
+    <maven.compiler.source>17</maven.compiler.source>
+    <maven.compiler.target>17</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <android.jar>${project.basedir}/../.cache/android-34.jar</android.jar>
+    <androidx.test.jar>${project.basedir}/../.cache/androidx-test/androidx-test.jar</androidx.test.jar>
+  </properties>
+  <dependencies>
+    <dependency>
+      <groupId>org.robolectric</groupId>
+      <artifactId>robolectric</artifactId>
+      <version>4.14.1</version>
+      <scope>test</scope>
+      <exclusions>
+        <!-- Only on Google Maven (not reachable from every build machine). -->
+        <exclusion><groupId>androidx.test</groupId><artifactId>monitor</artifactId></exclusion>
+        <exclusion><groupId>androidx.test.espresso</groupId><artifactId>espresso-idling-resource</artifactId></exclusion>
+      </exclusions>
+    </dependency>
+    <!-- Compile against the plain API 34 jar; Robolectric supplies the runtime. -->
+    <dependency>
+      <groupId>com.google.android</groupId>
+      <artifactId>android-api</artifactId>
+      <version>34</version>
+      <scope>system</scope>
+      <systemPath>${android.jar}</systemPath>
+    </dependency>
+    <!-- androidx.test classes, built from source by tools/build_androidx_test.py -->
+    <dependency>
+      <groupId>local.androidx.test</groupId>
+      <artifactId>monitor-classes</artifactId>
+      <version>1</version>
+      <scope>system</scope>
+      <systemPath>${androidx.test.jar}</systemPath>
+    </dependency>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.13.2</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+  <build>
+    <sourceDirectory>../src</sourceDirectory>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <phase>generate-sources</phase>
+            <goals><goal>add-source</goal></goals>
+            <configuration><sources><source>target/gen</source></sources></configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.5.2</version>
+        <configuration>
+          <systemPropertyVariables>
+            <shots>${project.build.directory}/shots</shots>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
