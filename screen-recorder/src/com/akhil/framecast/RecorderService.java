@@ -87,7 +87,7 @@ public class RecorderService extends Service {
     private Surface encSurface;
     private Thread vDrain;
     private volatile boolean videoEosSent;
-    private AudioEncoder audio;
+    private volatile AudioEncoder audio;
     private MuxerSink mux;
     private File tmp;
     private Bitmap shot;
@@ -135,9 +135,15 @@ public class RecorderService extends Service {
 
         prefs = new Prefs(this);
         micWanted = prefs.mic && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+        if (prefs.mic && !micWanted) {
+            Toast.makeText(this, "Microphone permission is off, so no voice will be recorded. Allow it on the FrameCast screen.", Toast.LENGTH_LONG).show();
+        }
         try {
             goForeground(micWanted);
         } catch (Throwable t) {
+            if (micWanted) {
+                Toast.makeText(this, "Android did not allow the microphone, so no voice will be recorded.", Toast.LENGTH_LONG).show();
+            }
             micWanted = false;
             try {
                 goForeground(false);
@@ -167,16 +173,56 @@ public class RecorderService extends Service {
         return START_NOT_STICKY;
     }
 
-    /**
-     * Tools panel + cursor. Uses the accessibility service when it is on (real
-     * clicks and scrolls), otherwise a normal "display over other apps" overlay.
-     */
+    /** Tool panel ("display over other apps"); null if that permission is off. */
     private OverlayController makeOverlay() {
-        ControlService a = ControlService.instance;
-        if (a != null) return new OverlayController(a, a);
-        if (Settings.canDrawOverlays(this)) return new OverlayController(this, null);
-        return null;
+        if (!Settings.canDrawOverlays(this)) return null;
+        return new OverlayController(this, new OverlayController.Snapshotter() {
+            @Override
+            public void snapshot(final OverlayController.SnapshotDone done) {
+                render.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        Bitmap copy = null;
+                        try {
+                            if (capturing && shot != null && shotW > 0 && shotH > 0) {
+                                copy = Bitmap.createBitmap(shot, 0, 0, shotW, shotH);
+                                if (copy == shot) copy = shot.copy(Bitmap.Config.ARGB_8888, false);
+                            }
+                        } catch (Throwable ignored) {
+                            copy = null;
+                        }
+                        final Bitmap b = copy;
+                        main.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                done.done(b);
+                            }
+                        });
+                    }
+                });
+            }
+        });
     }
+
+    private void toast(final String msg) {
+        main.post(new Runnable() {
+            @Override
+            public void run() {
+                Toast.makeText(RecorderService.this, msg, Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    /** A few seconds in: warn once if the mic hears nothing at all. */
+    private final Runnable micCheck = new Runnable() {
+        @Override
+        public void run() {
+            AudioEncoder a = audio;
+            if (!running || stopping || a == null) return;
+            if (a.problem != null) toast("Voice is not being recorded: " + a.problem);
+            else if (!a.heardSound()) toast("The microphone hears no sound. Check that no other app (call, voice recorder) is using it, and that Microphone access is on in phone Settings.");
+        }
+    };
 
     // ----------------------------------------------------------- screenshot
 
@@ -207,7 +253,6 @@ public class RecorderService extends Service {
                     @Override
                     public void run() {
                         Toast.makeText(RecorderService.this, m, Toast.LENGTH_SHORT).show();
-                        if (overlay != null) overlay.flash();
                     }
                 });
             }
@@ -272,12 +317,16 @@ public class RecorderService extends Service {
             if (micWanted) {
                 AudioEncoder a = new AudioEncoder();
                 if (a.prepare()) audio = a;
+                else toast("Voice is not being recorded: " + a.problem);
             }
             mux = new MuxerSink(tmp.getPath(), audio != null ? 2 : 1);
             videoEosSent = false;
             vDrain = new Thread(videoDrain, "framecast-video");
             vDrain.start();
-            if (audio != null) audio.start(mux);
+            if (audio != null) {
+                audio.start(mux);
+                main.postDelayed(micCheck, 4000);
+            }
 
             capturing = true;
             startedAt = SystemClock.elapsedRealtime();
@@ -546,7 +595,11 @@ public class RecorderService extends Service {
             }
             videoEosSent = true;
         }
-        if (audio != null) audio.stopAndJoin();
+        boolean silent = false;
+        if (audio != null) {
+            audio.stopAndJoin();
+            silent = !audio.heardSound();
+        }
         audio = null;
         if (vDrain != null) {
             try {
@@ -590,7 +643,8 @@ public class RecorderService extends Service {
                 Prefs.setLast(this, uri.toString(), name, dur);
                 //noinspection ResultOfMethodCallIgnored
                 tmp.delete();
-                message = "Video saved: Movies/FrameCast";
+                message = silent ? "Video saved: Movies/FrameCast (no voice: the mic heard nothing)"
+                        : "Video saved: Movies/FrameCast";
             } catch (Throwable t) {
                 Prefs.setLast(this, Uri.fromFile(tmp).toString(), tmp.getName(), dur);
                 message = "Could not save to Gallery (" + t.getMessage() + ")";
@@ -646,9 +700,7 @@ public class RecorderService extends Service {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 .putExtra("saved", true);
         try {
-            ControlService svc = ControlService.instance;
-            if (svc != null) svc.startActivity(i);
-            else startActivity(i);
+            startActivity(i);
         } catch (Throwable ignored) {
         }
     }

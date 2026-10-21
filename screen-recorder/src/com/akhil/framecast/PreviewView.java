@@ -80,7 +80,7 @@ final class PreviewView extends View {
             top += u * 6;
             if (top > h - u * 6) break;
         }
-        // Sample arrow + cursor, like a real recording.
+        // A sample arrow, like one drawn in Draw mode.
         Paint a = new Paint(Paint.ANTI_ALIAS_FLAG);
         a.setColor(Ui.INK[0]);
         a.setStrokeWidth(u * 0.45f);
@@ -93,15 +93,6 @@ final class PreviewView extends View {
         head.lineTo(ax2 + u * 2.2f, ay2 + u * 0.9f);
         head.close();
         c.drawPath(head, a);
-        Path cur = new Path();
-        Icons.cursorPath(cur, u * 8.2f, u * 13.6f, u * 0.14f);
-        Paint cf = new Paint(Paint.ANTI_ALIAS_FLAG);
-        cf.setColor(0xFFF8F4EC);
-        c.drawPath(cur, cf);
-        cf.setStyle(Paint.Style.STROKE);
-        cf.setStrokeWidth(u * 0.12f);
-        cf.setColor(Ui.INK_DARK);
-        c.drawPath(cur, cf);
         return b;
     }
 

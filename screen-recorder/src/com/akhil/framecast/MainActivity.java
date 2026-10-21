@@ -29,9 +29,8 @@ public class MainActivity extends Activity {
 
     private Prefs prefs;
     private PreviewView preview;
-    private TextView overlayPill, a11yPill, notifPill, micPill, startBtn, lastTitle, lastSub;
+    private TextView overlayPill, notifPill, micPill, startBtn, lastTitle, lastSub;
     private View notifRow, lastCard;
-    private boolean full;
     private boolean pendingStart, skipTools;
     private float dp;
 
@@ -40,7 +39,6 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         prefs = new Prefs(this);
         dp = Ui.dp(this, 1);
-        full = ControlService.isDeclared(this);
         setContentView(build());
     }
 
@@ -72,7 +70,7 @@ public class MainActivity extends Activity {
         TextView title = text("FrameCast", 30, 800, Ui.TEXT);
         title.setLetterSpacing(-0.02f);
         col.addView(title);
-        TextView sub = text("Record your screen inside a phone frame, with a cursor, arrows and boxes in the video.", 14, 450, Ui.MUTED);
+        TextView sub = text("Record your screen inside a phone frame, with your voice. Freeze the screen any time to draw arrows and boxes on it.", 14, 450, Ui.MUTED);
         sub.setPadding(0, (int) (4 * dp), 0, (int) (16 * dp));
         col.addView(sub);
 
@@ -129,32 +127,13 @@ public class MainActivity extends Activity {
         LinearLayout setup = card();
         overlayPill = pill();
         setup.addView(row("Tools over every screen",
-                "Allow FrameCast in \"Display over other apps\". This shows the arrow, square, cursor and tool panel on top of every app.",
+                "Allow FrameCast in \"Display over other apps\". This shows the tool panel on top of every app.",
                 overlayPill, new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
                         openOverlaySettings();
                     }
                 }));
-        a11yPill = pill();
-        if (full) setup.addView(row("Real click and scroll",
-                "Accessibility → Installed apps → FrameCast cursor and tools → On.\nIf it says \"Restricted setting\": App info → ⋮ (top right) → Allow restricted settings, then turn it on again.",
-                a11yPill, new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        openAccessibility();
-                    }
-                }));
-        TextView appInfo = text("Open App info", 13, 700, Ui.AMBER);
-        appInfo.setVisibility(full ? View.VISIBLE : View.GONE);
-        appInfo.setPadding(0, (int) (2 * dp), 0, (int) (12 * dp));
-        appInfo.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                openAppInfo();
-            }
-        });
-        setup.addView(appInfo);
         notifPill = pill();
         notifRow = row("Notification", "While recording, a Stop button also appears in the notification.", notifPill,
                 new View.OnClickListener() {
@@ -218,15 +197,10 @@ public class MainActivity extends Activity {
         col.addView(section("How to use"));
         LinearLayout how = card();
         String[][] steps = {
-                {"Arrow", "Tap Arrow, then drag on the screen. The arrow tip is where you lift your finger."},
-                {"Square", "Tap Square, then drag to draw a box."},
-                {"Mouse", "Move your thumb and the cursor follows. Lift your finger and the cursor stays there."},
-                full ? new String[]{"Click", "Quick tap = click there. Press and hold = only moves the cursor, no click. The ◎ button on the panel clicks at the cursor."}
-                        : new String[]{"Click", "Quick tap = shows a click mark in the video. To actually use the app, tap the Mouse button again (tool off) and tap normally. The cursor stays visible."},
-                full ? new String[]{"Scroll", "In Mouse mode, drag up / down with two fingers, or use the ⌃ ⌄ buttons on the panel."}
-                        : new String[]{"Scroll", "Turn the tool off and scroll normally. Recording keeps going."},
+                {"Live", "While recording, your phone works normally. Tap, scroll and open apps as usual."},
+                {"Draw", "Tap the pencil (Draw) button. The screen freezes and you can draw on it: Arrow, Square or Pen. Change colour or Undo on the panel."},
+                {"Back to Live", "Tap the same button again (now ▶ Live). All marks are removed and the phone works again."},
                 {"Screenshot", "The camera button saves a picture with the phone frame to Gallery → Pictures/FrameCast."},
-                {"Phone normal", "Tap the active tool again to turn it off and use your phone normally."},
                 {"Panel", "Drag the timer at the top to move the panel up or down. Tap the timer to shrink or expand the panel."},
                 {"Stop", "Tap the red ■ button or Stop in the notification. The video is saved to Gallery → Movies/FrameCast."},
         };
@@ -238,7 +212,7 @@ public class MainActivity extends Activity {
         }
         col.addView(how, cardLp());
 
-        TextView foot = text("The tool panel is kept out of the video. Only your screen, marks and cursor are recorded.", 12, 450, Ui.MUTED);
+        TextView foot = text("The tool panel is kept out of the video. Only your screen, your marks and your voice are recorded.", 12, 450, Ui.MUTED);
         foot.setPadding(0, (int) (14 * dp), 0, 0);
         col.addView(foot);
         return scroll;
@@ -363,7 +337,6 @@ public class MainActivity extends Activity {
 
     private void refresh() {
         setPill(overlayPill, Settings.canDrawOverlays(this), "Allowed", "Allow");
-        setPill(a11yPill, ControlService.isOn(this), "On", "Turn on");
         if (Build.VERSION.SDK_INT >= 33) {
             notifRow.setVisibility(View.VISIBLE);
             setPill(notifPill, granted(Manifest.permission.POST_NOTIFICATIONS), "Allowed", "Allow");
@@ -401,10 +374,10 @@ public class MainActivity extends Activity {
             if (r != null) r.requestStop();
             return;
         }
-        if (!skipTools && !ControlService.isOn(this) && !Settings.canDrawOverlays(this)) {
+        if (!skipTools && !Settings.canDrawOverlays(this)) {
             new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
                     .setTitle("Tools are off")
-                    .setMessage("To use the arrow, square, cursor and panel, allow FrameCast in \"Display over other apps\".")
+                    .setMessage("To use the Draw panel while recording, allow FrameCast in \"Display over other apps\".")
                     .setPositiveButton("Open settings", new android.content.DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(android.content.DialogInterface d, int w) {
@@ -494,14 +467,6 @@ public class MainActivity extends Activity {
     private void openOverlaySettings() {
         try {
             startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
-        } catch (Throwable t) {
-            openAppInfo();
-        }
-    }
-
-    private void openAccessibility() {
-        try {
-            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
         } catch (Throwable t) {
             openAppInfo();
         }

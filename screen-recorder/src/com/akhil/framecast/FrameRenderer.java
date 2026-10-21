@@ -160,7 +160,7 @@ public final class FrameRenderer {
     }
 
     /**
-     * Same, then {@code marks} (arrows, boxes, cursor) on top of the screen.
+     * Same, then {@code marks} (arrows, boxes, pen lines) on top of the screen.
      * {@code screenW} x {@code screenH} is the real screen size the marks use.
      */
     public void draw(Canvas c, Bitmap shot, int shotW, int shotH, Marks marks, float screenW, float screenH) {

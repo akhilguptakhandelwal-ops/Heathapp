@@ -8,7 +8,7 @@ import android.graphics.RectF;
 /** Small hand-drawn icons for the tool panel (no icon font, no emoji). */
 final class Icons {
     static final int ARROW = 1, SQUARE = 2, MOUSE = 3, CLICK = 4, UP = 5, DOWN = 6,
-            UNDO = 7, CLEAR = 8, STOP = 9, COLOR = 10, HIDE = 11, CAMERA = 12;
+            UNDO = 7, CLEAR = 8, STOP = 9, COLOR = 10, HIDE = 11, CAMERA = 12, PEN = 13, PENCIL = 14, PLAY = 15;
 
     private static final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private static final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -106,6 +106,29 @@ final class Icons {
                 path.lineTo(x0 + 15.5f * u, y0 + 7 * u);
                 c.drawPath(path, stroke);
                 c.drawCircle(cx, y0 + 13 * u, 3.4f * u, stroke);
+                break;
+            case PEN:      // pencil: "Draw"
+                path.moveTo(x0 + 5 * u, y0 + 19 * u);
+                path.lineTo(x0 + 6 * u, y0 + 15 * u);
+                path.lineTo(x0 + 16 * u, y0 + 5 * u);
+                path.lineTo(x0 + 19 * u, y0 + 8 * u);
+                path.lineTo(x0 + 9 * u, y0 + 18 * u);
+                path.close();
+                c.drawPath(path, stroke);
+                c.drawLine(x0 + 14 * u, y0 + 7 * u, x0 + 17 * u, y0 + 10 * u, stroke);
+                break;
+            case PENCIL:   // free-hand line tool
+                path.moveTo(x0 + 4 * u, y0 + 16 * u);
+                path.cubicTo(x0 + 8 * u, y0 + 4 * u, x0 + 12 * u, y0 + 22 * u, x0 + 16 * u, y0 + 10 * u);
+                path.quadTo(x0 + 18 * u, y0 + 5 * u, x0 + 20 * u, y0 + 8 * u);
+                c.drawPath(path, stroke);
+                break;
+            case PLAY:     // back to live
+                path.moveTo(x0 + 8 * u, y0 + 5.5f * u);
+                path.lineTo(x0 + 18.5f * u, cy);
+                path.lineTo(x0 + 8 * u, y0 + 18.5f * u);
+                path.close();
+                c.drawPath(path, fill);
                 break;
             case HIDE:
                 path.moveTo(x0 + 9 * u, y0 + 6 * u);

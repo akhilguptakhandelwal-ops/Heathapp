@@ -1,48 +1,41 @@
 package com.akhil.framecast;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.DashPathEffect;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Rect;
 import android.graphics.RectF;
-import android.os.SystemClock;
 import android.view.View;
 
 import java.util.ArrayList;
 
 /**
- * Full-screen, touch-through layer that shows arrows, boxes, the cursor and
- * click ripples. Everything is kept in screen coordinates.
+ * Full-screen drawing layer used in Freeze mode: shows the frozen screen
+ * picture and the arrows / boxes / pen lines drawn on it. Everything is kept
+ * in real screen coordinates.
  */
 final class InkView extends View {
-    static final int ARROW = 1, BOX = 2;
+    static final int ARROW = 1, BOX = 2, PEN = 3;
 
     static final class Shape {
         int type, color;
         float x1, y1, x2, y2;
-    }
-
-    private static final class Ripple {
-        float x, y;
-        long start;
+        Path path;
     }
 
     private final ArrayList<Shape> shapes = new ArrayList<>();
     private Shape current;
-    private final ArrayList<Ripple> ripples = new ArrayList<>();
 
-    private float cx = -1, cy = -1;
-    private boolean holding, scrolling;
-    private float scrollDy;
+    private Bitmap frozen;
+    private int screenW, screenH;
+    private final Rect frozenDst = new Rect();
 
     private final float dp;
     private final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint head = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint cursorFill = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint cursorEdge = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint halo = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint ring = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint picture = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Path path = new Path();
     private final RectF rect = new RectF();
     private final int[] loc = new int[2];
@@ -57,56 +50,13 @@ final class InkView extends View {
         line.setShadowLayer(3 * dp, 0, 1 * dp, 0x66000000);
         head.setStyle(Paint.Style.FILL);
         head.setShadowLayer(3 * dp, 0, 1 * dp, 0x66000000);
-        cursorFill.setColor(0xFFF8F4EC);
-        cursorFill.setShadowLayer(3 * dp, 0, 1.5f * dp, 0x80000000);
-        cursorEdge.setStyle(Paint.Style.STROKE);
-        cursorEdge.setStrokeJoin(Paint.Join.ROUND);
-        cursorEdge.setStrokeWidth(1.6f * dp);
-        cursorEdge.setColor(Ui.INK_DARK);
-        halo.setColor(0x40D9A441);
-        ring.setStyle(Paint.Style.STROKE);
-        ring.setStrokeWidth(2.5f * dp);
-        ring.setColor(Ui.AMBER);
     }
 
-    // ---- cursor
-
-    synchronized void placeCursorIfUnset(float x, float y) {
-        if (cx < 0) moveCursor(x, y);
-    }
-
-    synchronized void moveCursor(float x, float y) {
-        cx = x;
-        cy = y;
-        invalidate();
-    }
-
-    synchronized float cursorX() {
-        return cx;
-    }
-
-    synchronized float cursorY() {
-        return cy;
-    }
-
-    /** Finger is down in mouse mode: show a soft halo, no click happens. */
-    synchronized void setHolding(boolean h) {
-        holding = h;
-        invalidate();
-    }
-
-    synchronized void setScrolling(boolean s, float dy) {
-        scrolling = s;
-        scrollDy = dy;
-        invalidate();
-    }
-
-    synchronized void ripple(float x, float y) {
-        Ripple r = new Ripple();
-        r.x = x;
-        r.y = y;
-        r.start = SystemClock.uptimeMillis();
-        ripples.add(r);
+    /** The picture shown behind the marks (null = see-through). */
+    synchronized void setFrozen(Bitmap b, int w, int h) {
+        frozen = b;
+        screenW = w;
+        screenH = h;
         invalidate();
     }
 
@@ -118,11 +68,19 @@ final class InkView extends View {
         current.color = color;
         current.x1 = current.x2 = x;
         current.y1 = current.y2 = y;
+        if (type == PEN) {
+            current.path = new Path();
+            current.path.moveTo(x, y);
+        }
         invalidate();
     }
 
     synchronized void drag(float x, float y) {
         if (current == null) return;
+        if (current.type == PEN) {
+            // Smooth the line through midpoints.
+            current.path.quadTo(current.x2, current.y2, (current.x2 + x) / 2, (current.y2 + y) / 2);
+        }
         current.x2 = x;
         current.y2 = y;
         invalidate();
@@ -130,8 +88,13 @@ final class InkView extends View {
 
     synchronized void end() {
         if (current == null) return;
-        float dx = current.x2 - current.x1, dy = current.y2 - current.y1;
-        if (Math.hypot(dx, dy) > 14 * dp) shapes.add(current);
+        if (current.type == PEN) {
+            current.path.lineTo(current.x2, current.y2);
+            shapes.add(current);
+        } else {
+            float dx = current.x2 - current.x1, dy = current.y2 - current.y1;
+            if (Math.hypot(dx, dy) > 14 * dp) shapes.add(current);
+        }
         current = null;
         invalidate();
     }
@@ -152,11 +115,8 @@ final class InkView extends View {
         invalidate();
     }
 
-    synchronized void reset() {
-        clear();
-        ripples.clear();
-        cx = cy = -1;
-        holding = scrolling = false;
+    synchronized int count() {
+        return shapes.size();
     }
 
     // ---- drawing
@@ -166,27 +126,32 @@ final class InkView extends View {
         getLocationOnScreen(loc);
         c.save();
         c.translate(-loc[0], -loc[1]);
-        boolean animating = drawContent(c);
+        synchronized (this) {
+            if (frozen != null && !frozen.isRecycled() && screenW > 0) {
+                frozenDst.set(0, 0, screenW, screenH);
+                c.drawBitmap(frozen, null, frozenDst, picture);
+            }
+        }
+        drawMarks(c);
         c.restore();
-        if (animating) postInvalidateOnAnimation();
     }
 
     /**
-     * Draws marks, ripples and the cursor in screen coordinates. Also called
-     * from the recorder's render thread to paint them straight into the video.
-     * Returns true while a ripple is still animating.
+     * Draws the marks in screen coordinates. Also called from the recorder's
+     * render thread to paint them straight into the video.
      */
-    synchronized boolean drawContent(Canvas c) {
+    synchronized void drawMarks(Canvas c) {
         for (int i = 0; i < shapes.size(); i++) drawShape(c, shapes.get(i));
         if (current != null) drawShape(c, current);
-        boolean animating = drawRipples(c);
-        drawCursor(c);
-        return animating;
     }
 
     private void drawShape(Canvas c, Shape s) {
         line.setColor(s.color);
         head.setColor(s.color);
+        if (s.type == PEN) {
+            c.drawPath(s.path, line);
+            return;
+        }
         if (s.type == BOX) {
             rect.set(Math.min(s.x1, s.x2), Math.min(s.y1, s.y2), Math.max(s.x1, s.x2), Math.max(s.y1, s.y2));
             c.drawRoundRect(rect, 7 * dp, 7 * dp, line);
@@ -205,55 +170,5 @@ final class InkView extends View {
         path.lineTo(bx + uy * hw, by - ux * hw);
         path.close();
         c.drawPath(path, head);
-    }
-
-    private boolean drawRipples(Canvas c) {
-        long now = SystemClock.uptimeMillis();
-        boolean any = false;
-        for (int i = ripples.size() - 1; i >= 0; i--) {
-            Ripple r = ripples.get(i);
-            float t = (now - r.start) / 480f;
-            if (t >= 1) {
-                ripples.remove(i);
-                continue;
-            }
-            any = true;
-            ring.setAlpha((int) (255 * (1 - t)));
-            c.drawCircle(r.x, r.y, (8 + 30 * t) * dp, ring);
-            halo.setAlpha((int) (110 * (1 - t)));
-            c.drawCircle(r.x, r.y, (6 + 14 * t) * dp, halo);
-        }
-        ring.setAlpha(255);
-        halo.setAlpha(64);
-        return any;
-    }
-
-    private void drawCursor(Canvas c) {
-        if (cx < 0) return;
-        if (holding || scrolling) {
-            halo.setAlpha(64);
-            c.drawCircle(cx, cy, 22 * dp, halo);
-            ring.setPathEffect(new DashPathEffect(new float[]{5 * dp, 4 * dp}, 0));
-            ring.setAlpha(200);
-            c.drawCircle(cx, cy, 22 * dp, ring);
-            ring.setPathEffect(null);
-            ring.setAlpha(255);
-            if (scrolling) {
-                float dir = scrollDy == 0 ? 0 : (scrollDy > 0 ? 1 : -1);
-                if (dir != 0) {
-                    head.setColor(Ui.AMBER);
-                    path.reset();
-                    float ty = cy + dir * 34 * dp;
-                    path.moveTo(cx, ty + dir * 8 * dp);
-                    path.lineTo(cx - 8 * dp, ty - dir * 2 * dp);
-                    path.lineTo(cx + 8 * dp, ty - dir * 2 * dp);
-                    path.close();
-                    c.drawPath(path, head);
-                }
-            }
-        }
-        Icons.cursorPath(path, cx, cy, 1.45f * dp);
-        c.drawPath(path, cursorFill);
-        c.drawPath(path, cursorEdge);
     }
 }

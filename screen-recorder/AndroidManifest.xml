@@ -35,6 +35,5 @@
             android:exported="false"
             android:foregroundServiceType="mediaProjection|microphone" />
 
-        <!-- FULL_ONLY: accessibility service is inserted here by build.sh FULL=1 -->
     </application>
 </manifest>
