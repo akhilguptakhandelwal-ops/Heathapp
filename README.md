@@ -35,6 +35,14 @@ Local testing: `npx http-server -p 8080` then open `http://localhost:8080`.
 6. **Export** → quality chunein: Low 480p · Medium 720p · High 1080p · YouTube 1440p · Professional 4K. Fast mode mein video phone par seedha banti hai (still slides wale hisse bahut tez). Phir Play full screen, Save ya Share.
 7. **Intro & outro** (Home screen): ek clip ek baar save karein, Start / End mark karein — har export mein apne aap pehle ya aakhir mein judegi.
 
+## VoxBhav — Text to Voice (emotions ke saath)
+
+`voice/index.html` — text likho, awaaz mein badlo. Link: `https://<username>.github.io/Heathapp/voice/`
+
+- **ElevenLabs engine:** apni API key daalo → “Voices lao” → awaaz chuno. Text mein `[laughs]`, `[sad]`, `[whispers]`, `[excited]`, `[angry]`, `[sighs]` jaise tag (chips se ek tap mein) — v3 model sach mein hasta, rota, fusfusata hai. Hindi / Hinglish bhi. MP3 save / share.
+- **Phone ki awaaz:** bilkul free, bina key. Emotion = pitch / speed ka badlav, `[laughs]` par “हा हा हा”. File download nahi hoti.
+- Key aur text sirf phone ke andar (localStorage) save hote hain.
+
 ## Technical notes
 
 - Recording pixels capture nahi karti — har action (slide change, zoom, stroke) ek chhota event ban kar save hota hai, aur voice alag audio file. Isliye cuts aur edits lossless hain aur export full 1080p mein hota hai.
