@@ -11,11 +11,14 @@ A small panel sits on the right edge. It is **not** in the video.
 | Button | What it does |
 |---|---|
 | ✎ Draw | Freezes the screen. Draw on it with Arrow, Square or Pen; change colour; Undo |
-| ▶ Live | Removes all marks and unfreezes. Your phone works normally |
+| White / Black | Opens a blank white page or a black board; write with your finger (pen is ready, dark ink / chalk) |
+| ▶ Live | Removes all marks, closes the freeze / board. Your phone works normally |
 | Camera | Screenshot with the phone frame → Gallery → Pictures/FrameCast |
 | ■ | Stop → video saved to Gallery → Movies/FrameCast |
 
-In Live mode nothing covers the screen, so tapping, scrolling and opening apps work as usual. Drag the timer to move the panel; tap the timer to fold it.
+In Live mode nothing covers the screen, so tapping, scrolling and opening apps work as usual. Drag the panel from anywhere to put it anywhere, even 95% off the screen; tap the timer to fold it.
+
+**My recordings** (main screen → Open folder): all FrameCast videos and screenshots, each with Play / Open, Share and Delete.
 
 ## Setup on the phone
 

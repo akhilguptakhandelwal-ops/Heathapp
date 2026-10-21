@@ -17,8 +17,12 @@ public final class Ui {
     public static final int SAGE = 0xFF8FAE7E;
     public static final int INK_DARK = 0xFF1A1714;
 
-    /** Colours for arrows and boxes. */
-    public static final int[] INK = {0xFFE4572E, 0xFFF2B33D, 0xFF8FCB9B, 0xFFF4EDE1};
+    /** Colours for arrows, boxes and pen. */
+    public static final int[] INK = {0xFFE4572E, 0xFFF2B33D, 0xFF8FCB9B, 0xFFF4EDE1, 0xFF22262B};
+    public static final int CHALK = 3;      // index of the off-white ink (black board)
+    public static final int DARK_INK = 4;   // index of the dark ink (white board)
+    public static final int WHITE_BOARD = 0xFFFBFAF6;
+    public static final int BLACK_BOARD = 0xFF1F2420;
 
     private static Typeface regular, bold, heavy;
 

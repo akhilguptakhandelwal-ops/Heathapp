@@ -25,8 +25,10 @@ import android.widget.TextView;
  *       works completely normally.</li>
  *   <li><b>Draw</b>: the screen picture is frozen under a full-screen layer
  *       and you draw arrows, boxes and pen lines on it.</li>
+ *   <li><b>White / Black board</b>: same, on a plain white or black page.</li>
  *   <li>Back to <b>Live</b>: all marks are removed and the phone works again.</li>
  * </ul>
+ * The panel can be dragged anywhere, even mostly off the screen.
  */
 final class OverlayController {
     static final int ARROW = InkView.ARROW, SQUARE = InkView.BOX, PEN = InkView.PEN;
@@ -47,12 +49,13 @@ final class OverlayController {
     private final Snapshotter snapshotter;
 
     private volatile InkView ink;
-    private LinearLayout panel, drawTools;
+    private LinearLayout panel, drawTools, boards;
     private TextView timer, freezeLabel;
     private Btn bFreeze, bArrow, bSquare, bPen, bColor;
     private WindowManager.LayoutParams inkLp, panelLp;
 
     private boolean shown, collapsed, frozen, freezing, inkAttached;
+    private int board;     // 0 = frozen screen picture, else the board colour
     private int tool = ARROW;
     private int colorIdx;
     private Bitmap frozenPicture;
@@ -115,13 +118,14 @@ final class OverlayController {
 
     // -------------------------------------------------------------- freeze
 
-    /** Live -> Draw (screen freezes), Draw -> Live (marks removed). */
+    /** Live -> Draw (screen freezes), Draw / board -> Live (marks removed). */
     void toggleFreeze() {
         if (!shown || freezing) return;
         if (frozen) {
             goLive();
             return;
         }
+        board = 0;
         freezing = true;
         if (snapshotter == null) {
             enterFreeze(null);
@@ -135,6 +139,13 @@ final class OverlayController {
         });
     }
 
+    /** Opens a plain white or black page to write on. */
+    void openBoard(int color) {
+        if (!shown || freezing || frozen) return;
+        board = color;
+        enterFreeze(null);
+    }
+
     private void enterFreeze(Bitmap picture) {
         freezing = false;
         if (!shown || frozen) {
@@ -146,6 +157,7 @@ final class OverlayController {
         Point s = screenSize();
         ink.clear();
         ink.setFrozen(picture, s.x, s.y);
+        ink.setBoard(board);
         try {
             wm.addView(ink, inkLp);
             inkAttached = true;
@@ -154,7 +166,17 @@ final class OverlayController {
             wm.addView(panel, panelLp);
         } catch (Throwable ignored) {
         }
-        tool = ARROW;
+        if (board == Ui.WHITE_BOARD) {
+            tool = PEN;
+            colorIdx = Ui.DARK_INK;
+        } else if (board == Ui.BLACK_BOARD) {
+            tool = PEN;
+            colorIdx = Ui.CHALK;
+        } else {
+            tool = ARROW;
+            if (colorIdx == Ui.DARK_INK || colorIdx == Ui.CHALK) colorIdx = 0;
+        }
+        bColor.setExtra(Ui.INK[colorIdx]);
         updateButtons();
     }
 
@@ -163,6 +185,7 @@ final class OverlayController {
         if (ink != null) {
             ink.clear();
             ink.setFrozen(null, 0, 0);
+            ink.setBoard(0);
         }
         removeInk();
         if (frozenPicture != null) frozenPicture.recycle();
@@ -194,6 +217,7 @@ final class OverlayController {
         bFreeze.setOn(frozen);
         freezeLabel.setText(frozen ? "Live" : "Draw");
         drawTools.setVisibility(frozen && !collapsed ? View.VISIBLE : View.GONE);
+        boards.setVisibility(!frozen && !collapsed ? View.VISIBLE : View.GONE);
         bArrow.setOn(tool == ARROW);
         bSquare.setOn(tool == SQUARE);
         bPen.setOn(tool == PEN);
@@ -256,7 +280,7 @@ final class OverlayController {
         }
         if (Build.VERSION.SDK_INT >= 30) inkLp.setFitInsetsTypes(0);
 
-        panel = new LinearLayout(c);
+        panel = new DragPanel(c);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setGravity(Gravity.CENTER_HORIZONTAL);
         int pad = (int) (6 * dp);
@@ -271,7 +295,12 @@ final class OverlayController {
         timer.setText("3");
         timer.setPadding(0, (int) (6 * dp), 0, (int) (6 * dp));
         timer.setMinWidth((int) (46 * dp));
-        timer.setOnTouchListener(new PanelDrag());
+        timer.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                setCollapsed(!collapsed);
+            }
+        });
         panel.addView(timer);
 
         bFreeze = addBtn(panel, Icons.PEN, new View.OnClickListener() {
@@ -287,6 +316,25 @@ final class OverlayController {
         freezeLabel.setGravity(Gravity.CENTER);
         freezeLabel.setText("Draw");
         panel.addView(freezeLabel);
+
+        boards = new LinearLayout(c);
+        boards.setOrientation(LinearLayout.VERTICAL);
+        boards.setGravity(Gravity.CENTER_HORIZONTAL);
+        panel.addView(boards);
+        addBtn(boards, Icons.WHITEBOARD, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openBoard(Ui.WHITE_BOARD);
+            }
+        });
+        addLabel(boards, "White");
+        addBtn(boards, Icons.BLACKBOARD, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openBoard(Ui.BLACK_BOARD);
+            }
+        });
+        addLabel(boards, "Black");
 
         drawTools = new LinearLayout(c);
         drawTools.setOrientation(LinearLayout.VERTICAL);
@@ -312,6 +360,12 @@ final class OverlayController {
                 if (ink != null) ink.undo();
             }
         });
+        addBtn(drawTools, Icons.CLEAR, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (ink != null) ink.clear();
+            }
+        });
 
         addDivider(panel);
         addBtn(panel, Icons.CAMERA, new View.OnClickListener() {
@@ -333,11 +387,13 @@ final class OverlayController {
 
         panelLp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, type,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
-        panelLp.gravity = Gravity.TOP | Gravity.END;
-        panelLp.x = (int) (6 * dp);
-        panelLp.y = (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.16f);
+        panelLp.gravity = Gravity.TOP | Gravity.LEFT;
+        Point scr = screenSize();
+        panelLp.x = scr.x - (int) (64 * dp);
+        panelLp.y = (int) (scr.y * 0.14f);
     }
 
     private View.OnClickListener pickTool(final int t) {
@@ -360,6 +416,16 @@ final class OverlayController {
         return b;
     }
 
+    private void addLabel(LinearLayout parent, String text) {
+        TextView t = new TextView(ctx);
+        t.setTypeface(Ui.font(ctx, 700));
+        t.setTextSize(10);
+        t.setTextColor(Ui.MUTED);
+        t.setGravity(Gravity.CENTER);
+        t.setText(text);
+        parent.addView(t);
+    }
+
     private void addDivider(LinearLayout parent) {
         View v = new View(ctx);
         v.setBackgroundColor(0x33F1EADF);
@@ -375,38 +441,70 @@ final class OverlayController {
         updateButtons();
     }
 
-    /** Drag the timer to move the panel up / down; tap it to fold the panel. */
-    private final class PanelDrag implements View.OnTouchListener {
-        float startRawY;
-        int startY;
-        boolean dragged;
+    /**
+     * Moves the panel when it is dragged from anywhere (a button too: a short
+     * tap still clicks it). It can go anywhere, up to 95% off the screen.
+     */
+    final class DragPanel extends LinearLayout {
+        private float downX, downY;
+        private int startX, startY;
+        private boolean dragging;
+        private final float slop = 10 * dp;
+
+        DragPanel(Context c) {
+            super(c);
+        }
 
         @Override
-        public boolean onTouch(View v, MotionEvent e) {
+        public boolean onInterceptTouchEvent(MotionEvent e) {
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
-                    startRawY = e.getRawY();
-                    startY = panelLp.y;
-                    dragged = false;
+                    start(e);
+                    return false;
+                case MotionEvent.ACTION_MOVE:
+                    if (!dragging && Math.hypot(e.getRawX() - downX, e.getRawY() - downY) > slop) dragging = true;
+                    return dragging;
+                default:
+                    return false;
+            }
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent e) {
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    start(e);
                     return true;
                 case MotionEvent.ACTION_MOVE:
-                    float d = e.getRawY() - startRawY;
-                    if (Math.abs(d) > 8 * dp) dragged = true;
-                    if (dragged) {
-                        int maxY = ctx.getResources().getDisplayMetrics().heightPixels - panel.getHeight();
-                        panelLp.y = Math.max(0, Math.min(Math.max(0, maxY), (int) (startY + d)));
-                        try {
-                            wm.updateViewLayout(panel, panelLp);
-                        } catch (Throwable ignored) {
-                        }
-                    }
-                    return true;
-                case MotionEvent.ACTION_UP:
-                    if (!dragged) setCollapsed(!collapsed);
+                    if (!dragging && Math.hypot(e.getRawX() - downX, e.getRawY() - downY) > slop) dragging = true;
+                    if (dragging) moveTo(startX + (int) (e.getRawX() - downX), startY + (int) (e.getRawY() - downY));
                     return true;
                 default:
+                    dragging = false;
                     return true;
             }
+        }
+
+        private void start(MotionEvent e) {
+            downX = e.getRawX();
+            downY = e.getRawY();
+            startX = panelLp.x;
+            startY = panelLp.y;
+            dragging = false;
+        }
+    }
+
+    /** Places the panel; at least 5% of it always stays on screen. */
+    void moveTo(int x, int y) {
+        if (panel == null) return;
+        Point scr = screenSize();
+        int w = Math.max(1, panel.getWidth()), hgt = Math.max(1, panel.getHeight());
+        int keepX = Math.max(1, (int) (w * 0.05f)), keepY = Math.max(1, (int) (hgt * 0.05f));
+        panelLp.x = Math.max(keepX - w, Math.min(scr.x - keepX, x));
+        panelLp.y = Math.max(keepY - hgt, Math.min(scr.y - keepY, y));
+        try {
+            wm.updateViewLayout(panel, panelLp);
+        } catch (Throwable ignored) {
         }
     }
 

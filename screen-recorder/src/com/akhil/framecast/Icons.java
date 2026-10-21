@@ -8,7 +8,7 @@ import android.graphics.RectF;
 /** Small hand-drawn icons for the tool panel (no icon font, no emoji). */
 final class Icons {
     static final int ARROW = 1, SQUARE = 2, MOUSE = 3, CLICK = 4, UP = 5, DOWN = 6,
-            UNDO = 7, CLEAR = 8, STOP = 9, COLOR = 10, HIDE = 11, CAMERA = 12, PEN = 13, PENCIL = 14, PLAY = 15;
+            UNDO = 7, CLEAR = 8, STOP = 9, COLOR = 10, HIDE = 11, CAMERA = 12, PEN = 13, PENCIL = 14, PLAY = 15, WHITEBOARD = 16, BLACKBOARD = 17;
 
     private static final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private static final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -129,6 +129,33 @@ final class Icons {
                 path.lineTo(x0 + 8 * u, y0 + 18.5f * u);
                 path.close();
                 c.drawPath(path, fill);
+                break;
+            case WHITEBOARD:
+                r.set(x0 + 3.5f * u, y0 + 5 * u, x0 + 20.5f * u, y0 + 18 * u);
+                fill.setColor(0xFFFBFAF6);
+                c.drawRoundRect(r, 2 * u, 2 * u, fill);
+                stroke.setColor(0xFF22262B);
+                stroke.setStrokeWidth(1.5f * u);
+                path.moveTo(x0 + 6.5f * u, y0 + 13 * u);
+                path.cubicTo(x0 + 9 * u, y0 + 8 * u, x0 + 12 * u, y0 + 16 * u, x0 + 17 * u, y0 + 9 * u);
+                c.drawPath(path, stroke);
+                stroke.setColor(color);
+                stroke.setStrokeWidth(2.1f * u);
+                c.drawLine(x0 + 12 * u, y0 + 18 * u, x0 + 12 * u, y0 + 21 * u, stroke);
+                break;
+            case BLACKBOARD:
+                r.set(x0 + 3.5f * u, y0 + 5 * u, x0 + 20.5f * u, y0 + 18 * u);
+                fill.setColor(0xFF1F2420);
+                c.drawRoundRect(r, 2 * u, 2 * u, fill);
+                stroke.setStrokeWidth(1.4f * u);
+                c.drawRoundRect(r, 2 * u, 2 * u, stroke);
+                stroke.setColor(0xFFF4EDE1);
+                path.moveTo(x0 + 6.5f * u, y0 + 13 * u);
+                path.cubicTo(x0 + 9 * u, y0 + 8 * u, x0 + 12 * u, y0 + 16 * u, x0 + 17 * u, y0 + 9 * u);
+                c.drawPath(path, stroke);
+                stroke.setColor(color);
+                stroke.setStrokeWidth(2.1f * u);
+                c.drawLine(x0 + 12 * u, y0 + 18 * u, x0 + 12 * u, y0 + 21 * u, stroke);
                 break;
             case HIDE:
                 path.moveTo(x0 + 9 * u, y0 + 6 * u);

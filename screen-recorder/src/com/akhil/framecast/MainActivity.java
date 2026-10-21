@@ -30,7 +30,7 @@ public class MainActivity extends Activity {
     private Prefs prefs;
     private PreviewView preview;
     private TextView overlayPill, notifPill, micPill, startBtn, lastTitle, lastSub;
-    private View notifRow, lastCard;
+    private View notifRow, lastCard, lastPlay, lastShare;
     private boolean pendingStart, skipTools;
     private float dp;
 
@@ -96,29 +96,42 @@ public class MainActivity extends Activity {
         sl.topMargin = (int) (14 * dp);
         col.addView(startBtn, sl);
 
-        // Last video
+        // My recordings
         LinearLayout lc = card();
         lastCard = lc;
-        lastTitle = text("", 15, 700, Ui.TEXT);
+        lastTitle = text("My recordings", 15, 700, Ui.TEXT);
         lastSub = text("", 13, 450, Ui.MUTED);
         lc.addView(lastTitle);
         lc.addView(lastSub);
         LinearLayout actions = new LinearLayout(this);
         actions.setPadding(0, (int) (10 * dp), 0, 0);
-        actions.addView(smallButton("Play", new View.OnClickListener() {
+        TextView openFolder = smallButton("Open folder", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, LibraryActivity.class));
+            }
+        });
+        openFolder.setTextColor(Ui.INK_DARK);
+        openFolder.setBackground(Ui.round(Ui.AMBER, 30 * dp));
+        actions.addView(openFolder);
+        View gap0 = new View(this);
+        actions.addView(gap0, new LinearLayout.LayoutParams((int) (10 * dp), 1));
+        lastPlay = smallButton("Play last", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 openLast(false);
             }
-        }));
+        });
+        actions.addView(lastPlay);
         View gap = new View(this);
         actions.addView(gap, new LinearLayout.LayoutParams((int) (10 * dp), 1));
-        actions.addView(smallButton("Share", new View.OnClickListener() {
+        lastShare = smallButton("Share", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 openLast(true);
             }
-        }));
+        });
+        actions.addView(lastShare);
         lc.addView(actions);
         col.addView(lc, cardLp());
 
@@ -199,9 +212,11 @@ public class MainActivity extends Activity {
         String[][] steps = {
                 {"Live", "While recording, your phone works normally. Tap, scroll and open apps as usual."},
                 {"Draw", "Tap the pencil (Draw) button. The screen freezes and you can draw on it: Arrow, Square or Pen. Change colour or Undo on the panel."},
+                {"White / Black board", "Tap White or Black on the panel for a blank page. Write on it with your finger. Tap ▶ Live to close it."},
                 {"Back to Live", "Tap the same button again (now ▶ Live). All marks are removed and the phone works again."},
                 {"Screenshot", "The camera button saves a picture with the phone frame to Gallery → Pictures/FrameCast."},
-                {"Panel", "Drag the timer at the top to move the panel up or down. Tap the timer to shrink or expand the panel."},
+                {"Panel", "Drag the panel anywhere, even almost off the screen, so it never covers important words. Tap the timer to shrink or expand it."},
+                {"My recordings", "Open folder shows all your videos and screenshots. Play, Share or Delete each one."},
                 {"Stop", "Tap the red ■ button or Stop in the notification. The video is saved to Gallery → Movies/FrameCast."},
         };
         for (String[] s : steps) {
@@ -350,14 +365,14 @@ public class MainActivity extends Activity {
         startBtn.setBackground(Ui.round(rec ? 0xFF3A322B : Ui.VERMILION, 18 * dp));
 
         String uri = Prefs.lastUri(this);
+        lastPlay.setVisibility(uri == null ? View.GONE : View.VISIBLE);
+        lastShare.setVisibility(uri == null ? View.GONE : View.VISIBLE);
         if (uri == null) {
-            lastCard.setVisibility(View.GONE);
+            lastSub.setText("Play, share or delete your videos and screenshots.");
         } else {
-            lastCard.setVisibility(View.VISIBLE);
-            lastTitle.setText("Last video");
             long s = Prefs.lastMs(this) / 1000;
-            lastSub.setText(Prefs.lastName(this) + "  ·  " + String.format(Locale.US, "%d:%02d", s / 60, s % 60)
-                    + "\nGallery → Movies/FrameCast");
+            lastSub.setText("Last: " + Prefs.lastName(this) + "  ·  " + String.format(Locale.US, "%d:%02d", s / 60, s % 60)
+                    + "\nPlay, share or delete everything in Open folder.");
         }
         preview.refresh();
     }

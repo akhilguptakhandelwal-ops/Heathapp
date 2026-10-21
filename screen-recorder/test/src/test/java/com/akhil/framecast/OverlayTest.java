@@ -232,4 +232,93 @@ public class OverlayTest {
         int card = out.getPixel((int) (s.left + 160 * k), (int) (s.top + 360 * k));
         assertTrue("frozen screen missing", Shots.dist(card, screen.getPixel(160, 360)) < 40);
     }
+
+    private void boardShot(int color, String file) {
+        View btn = color == Ui.WHITE_BOARD ? ((LinearLayout) field("boards")).getChildAt(0)
+                : ((LinearLayout) field("boards")).getChildAt(2);
+        assertTrue(btn.performClick());
+        idle(20);
+        assertTrue(o.isFrozen());
+        // Pen is ready straight away; write a word-ish squiggle.
+        touch(MotionEvent.ACTION_DOWN, t, 150, 900);
+        for (int i = 1; i <= 30; i++) {
+            touch(MotionEvent.ACTION_MOVE, t + i * 10, 150 + i * 25, 900 + (float) Math.sin(i / 1.5) * 90);
+        }
+        touch(MotionEvent.ACTION_UP, t + 400, 900, 900);
+        assertEquals(1, ink().count());
+
+        Bitmap live = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
+        View ink = ink();
+        ink.measure(View.MeasureSpec.makeMeasureSpec(W, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(H, View.MeasureSpec.EXACTLY));
+        ink.layout(0, 0, W, H);
+        ink.draw(new Canvas(live));
+        assertTrue("board colour", Shots.dist(live.getPixel(50, 2200), color) < 10);
+        FrameRenderer fr = new FrameRenderer(1080, 1920, 0, 0);
+        fr.layout(W / (float) H);
+        Bitmap cap = Bitmap.createScaledBitmap(live, fr.capW, fr.capH, true);
+        Bitmap out = Bitmap.createBitmap(1080, 1920, Bitmap.Config.ARGB_8888);
+        fr.draw(new Canvas(out), cap, fr.capW, fr.capH, new FrameRenderer.Marks() {
+            @Override
+            public void draw(Canvas cc) {
+                o.drawMarks(cc);
+            }
+        }, W, H);
+        Shots.save(out, file);
+
+        click("bFreeze");   // Live: board closes, writing gone
+        assertFalse(o.isFrozen());
+        assertEquals(0, ink().count());
+        assertFalse((Boolean) field("inkAttached"));
+    }
+
+    @Test
+    public void whiteBoard() {
+        boardShot(Ui.WHITE_BOARD, "video_frame_white_board.png");
+    }
+
+    @Test
+    public void blackBoard() {
+        boardShot(Ui.BLACK_BOARD, "video_frame_black_board.png");
+    }
+
+    @Test
+    public void panelGoesAnywhereButNeverFullyOff() {
+        View panel = field("panel");
+        panel.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        panel.layout(0, 0, panel.getMeasuredWidth(), panel.getMeasuredHeight());
+        int w = panel.getWidth(), hgt = panel.getHeight();
+        assertTrue(w > 50 && hgt > 200);
+        WindowManager.LayoutParams lp = field("panelLp");
+
+        o.moveTo(300, 900);                       // middle of the screen
+        assertEquals(300, lp.x);
+        assertEquals(900, lp.y);
+        o.moveTo(-5000, -5000);                   // far off the top-left
+        assertEquals(Math.max(1, (int) (w * 0.05f)) - w, lp.x);
+        assertEquals(Math.max(1, (int) (hgt * 0.05f)) - hgt, lp.y);
+        o.moveTo(9000, 9000);                     // far off the bottom-right
+        assertTrue(lp.x <= W && lp.x > W - w);
+        assertTrue(lp.y <= H && lp.y > H - hgt);
+
+        // Dragging from a button moves the panel; a plain tap still clicks it.
+        o.moveTo(500, 500);
+        View drawBtn = field("bFreeze");
+        long now = SystemClock.uptimeMillis();
+        MotionEvent d = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, 30, 80, 0);
+        panel.dispatchTouchEvent(d);
+        MotionEvent m0 = MotionEvent.obtain(now, now + 15, MotionEvent.ACTION_MOVE, 30 - 100, 80 + 150, 0);
+        panel.dispatchTouchEvent(m0);
+        MotionEvent m = MotionEvent.obtain(now, now + 30, MotionEvent.ACTION_MOVE, 30 - 200, 80 + 300, 0);
+        panel.dispatchTouchEvent(m);
+        MotionEvent u = MotionEvent.obtain(now, now + 60, MotionEvent.ACTION_UP, 30 - 200, 80 + 300, 0);
+        panel.dispatchTouchEvent(u);
+        assertEquals(300, lp.x);
+        assertEquals(800, lp.y);
+        assertFalse("drag must not press Draw", o.isFrozen());
+        assertTrue(drawBtn.performClick());
+        idle(20);
+        assertTrue(o.isFrozen());
+    }
 }

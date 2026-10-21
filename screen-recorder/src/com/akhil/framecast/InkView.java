@@ -29,6 +29,7 @@ final class InkView extends View {
     private Shape current;
 
     private Bitmap frozen;
+    private int boardColor;          // 0 = none, else a solid board (white / black)
     private int screenW, screenH;
     private final Rect frozenDst = new Rect();
 
@@ -50,6 +51,12 @@ final class InkView extends View {
         line.setShadowLayer(3 * dp, 0, 1 * dp, 0x66000000);
         head.setStyle(Paint.Style.FILL);
         head.setShadowLayer(3 * dp, 0, 1 * dp, 0x66000000);
+    }
+
+    /** Solid board behind the marks (0 = none). */
+    synchronized void setBoard(int color) {
+        boardColor = color;
+        invalidate();
     }
 
     /** The picture shown behind the marks (null = see-through). */
@@ -127,7 +134,8 @@ final class InkView extends View {
         c.save();
         c.translate(-loc[0], -loc[1]);
         synchronized (this) {
-            if (frozen != null && !frozen.isRecycled() && screenW > 0) {
+            if (boardColor != 0) c.drawColor(boardColor);
+            else if (frozen != null && !frozen.isRecycled() && screenW > 0) {
                 frozenDst.set(0, 0, screenW, screenH);
                 c.drawBitmap(frozen, null, frozenDst, picture);
             }
