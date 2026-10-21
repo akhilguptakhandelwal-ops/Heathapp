@@ -1,7 +1,6 @@
 package com.akhil.framecast;
 
 import android.graphics.Bitmap;
-import android.graphics.BitmapShader;
 import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
@@ -31,14 +30,13 @@ public final class FrameRenderer {
     private final Paint lens = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint lensRing = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Matrix matrix = new Matrix();
-    private Bitmap shaderBitmap;
+    private final android.graphics.Rect srcRect = new android.graphics.Rect();
     private final android.graphics.Path screenClip = new android.graphics.Path();
 
     /** Things drawn on top of the screen image, in real screen pixels. */
     public interface Marks {
         void draw(Canvas c);
     }
-    private BitmapShader shader;
 
     public FrameRenderer(int outW, int outH, int phone, int background) {
         this.outW = outW;
@@ -147,8 +145,11 @@ public final class FrameRenderer {
         hi.setColor(0x26FFFFFF);
         c.drawRoundRect(glass, radius - inset, radius - inset, hi);
 
-        // Screen area (black until the first frame arrives).
-        c.drawRoundRect(screen, screenRadius, screenRadius, black);
+        // Cut a see-through hole where the screen goes; the screen picture is
+        // drawn underneath, so the frame's rounded corners stay smooth.
+        Paint hole = new Paint(Paint.ANTI_ALIAS_FLAG);
+        hole.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR));
+        c.drawRoundRect(screen, screenRadius, screenRadius, hole);
     }
 
     /**
@@ -164,18 +165,13 @@ public final class FrameRenderer {
      * {@code screenW} x {@code screenH} is the real screen size the marks use.
      */
     public void draw(Canvas c, Bitmap shot, int shotW, int shotH, Marks marks, float screenW, float screenH) {
-        c.drawBitmap(base, 0, 0, null);
+        // 1. black screen, 2. the captured picture, 3. the frame on top (it has a hole for the screen).
+        c.drawRect(screen, black);
         if (shot != null && !shot.isRecycled() && shotW > 0 && shotH > 0) {
-            if (shot != shaderBitmap) {
-                shaderBitmap = shot;
-                shader = new BitmapShader(shot, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-                shotPaint.setShader(shader);
-            }
-            matrix.setScale(screen.width() / shotW, screen.height() / shotH);
-            matrix.postTranslate(screen.left, screen.top);
-            shader.setLocalMatrix(matrix);
-            c.drawRoundRect(screen, screenRadius, screenRadius, shotPaint);
+            srcRect.set(0, 0, Math.min(shotW, shot.getWidth()), Math.min(shotH, shot.getHeight()));
+            c.drawBitmap(shot, srcRect, screen, shotPaint);
         }
+        c.drawBitmap(base, 0, 0, null);
         if (marks != null && screenW > 0 && screenH > 0) {
             c.save();
             c.clipPath(screenClip);
@@ -197,7 +193,5 @@ public final class FrameRenderer {
     public void release() {
         if (base != null) base.recycle();
         base = null;
-        shaderBitmap = null;
-        shader = null;
     }
 }

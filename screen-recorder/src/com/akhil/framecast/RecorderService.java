@@ -332,8 +332,11 @@ public class RecorderService extends Service {
             startedAt = SystemClock.elapsedRealtime();
             frameNo = 0;
             firstTick = SystemClock.uptimeMillis();
+            framesIn = 0;
+            sawContent = false;
             render.post(tick);
             main.post(timerUpdater);
+            main.postDelayed(screenCheck, 5000);
         } catch (Throwable t) {
             final String msg = t.getMessage();
             main.post(new Runnable() {
@@ -422,12 +425,41 @@ public class RecorderService extends Service {
                     scratch.limit(need);
                     shot.copyPixelsFromBuffer(scratch);
                 }
+                framesIn++;
+                if (!sawContent && framesIn % 10 == 1) sawContent = hasContent(shot, w, h);
                 hidePanel(w, h);
                 shotW = w;
                 shotH = h;
             } catch (Throwable ignored) {
             } finally {
                 if (img != null) img.close();
+            }
+        }
+    };
+
+    private volatile int framesIn;
+    private volatile boolean sawContent;
+
+    /** False when every sampled pixel is pure black (what Android sends when capture is blocked). */
+    private static boolean hasContent(Bitmap b, int w, int h) {
+        for (int gy = 1; gy < 12; gy++) {
+            for (int gx = 1; gx < 8; gx++) {
+                int p = b.getPixel(w * gx / 8, h * gy / 12);
+                if ((p & 0x00FFFFFF) != 0) return true;
+            }
+        }
+        return false;
+    }
+
+    /** A few seconds in: say so if the screen picture is missing or black. */
+    private final Runnable screenCheck = new Runnable() {
+        @Override
+        public void run() {
+            if (!running || stopping) return;
+            if (framesIn == 0) {
+                toast("Android is not sending the screen picture. Stop, start again and allow \"Entire screen\".");
+            } else if (!sawContent) {
+                toast("The screen is coming through black. Stop, start again and choose \"Entire screen\" (not a single app). Some apps (banking, Netflix) also block recording.");
             }
         }
     };
@@ -643,8 +675,9 @@ public class RecorderService extends Service {
                 Prefs.setLast(this, uri.toString(), name, dur);
                 //noinspection ResultOfMethodCallIgnored
                 tmp.delete();
-                message = silent ? "Video saved: Movies/FrameCast (no voice: the mic heard nothing)"
-                        : "Video saved: Movies/FrameCast";
+                message = "Video saved: Movies/FrameCast";
+                if (!sawContent) message += " (the screen came through black: choose \"Entire screen\" next time)";
+                if (silent) message += " (no voice: the mic heard nothing)";
             } catch (Throwable t) {
                 Prefs.setLast(this, Uri.fromFile(tmp).toString(), tmp.getName(), dur);
                 message = "Could not save to Gallery (" + t.getMessage() + ")";

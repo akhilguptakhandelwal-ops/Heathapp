@@ -451,7 +451,15 @@ public class MainActivity extends Activity {
         pendingStart = false;
         MediaProjectionManager mpm = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
         try {
-            startActivityForResult(mpm.createScreenCaptureIntent(), REQ_CAPTURE);
+            Intent ask;
+            if (Build.VERSION.SDK_INT >= 34) {
+                // Entire screen only: "A single app" records everything else as black.
+                ask = mpm.createScreenCaptureIntent(
+                        android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay());
+            } else {
+                ask = mpm.createScreenCaptureIntent();
+            }
+            startActivityForResult(ask, REQ_CAPTURE);
         } catch (ActivityNotFoundException e) {
             Toast.makeText(this, "This phone does not support screen recording", Toast.LENGTH_LONG).show();
         }
