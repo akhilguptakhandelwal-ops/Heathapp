@@ -142,7 +142,7 @@ public class RecorderService extends Service {
             try {
                 goForeground(false);
             } catch (Throwable t2) {
-                fail("Recording start nahi ho payi: " + t2.getMessage());
+                fail("Could not start recording: " + t2.getMessage());
                 return START_NOT_STICKY;
             }
         }
@@ -155,7 +155,7 @@ public class RecorderService extends Service {
             projection = null;
         }
         if (projection == null) {
-            fail("Screen record ki permission nahi mili");
+            fail("Screen recording permission was not given");
             return START_NOT_STICKY;
         }
         projection.registerCallback(projectionCallback, main);
@@ -187,7 +187,7 @@ public class RecorderService extends Service {
             public void run() {
                 String msg;
                 if (!capturing || fr == null || shot == null || shotW == 0) {
-                    msg = "Recording shuru hone ke baad screenshot lein";
+                    msg = "Take the screenshot after recording has started";
                 } else {
                     Bitmap out = null;
                     try {
@@ -197,7 +197,7 @@ public class RecorderService extends Service {
                         Saver.savePng(RecorderService.this, out, name);
                         msg = "Screenshot saved: Pictures/FrameCast";
                     } catch (Throwable t) {
-                        msg = "Screenshot save nahi hua: " + t.getMessage();
+                        msg = "Could not save screenshot: " + t.getMessage();
                     } finally {
                         if (out != null) out.recycle();
                     }
@@ -255,7 +255,7 @@ public class RecorderService extends Service {
             float aspect = real.x / (float) real.y;
             lastPortrait = real.y >= real.x;
             if (!setupEncoder(prefs.outputSize(false), aspect) && !setupEncoder(prefs.outputSize(true), aspect)) {
-                throw new IllegalStateException("Video encoder is phone par nahi chala");
+                throw new IllegalStateException("The video encoder did not work on this phone");
             }
             DisplayMetrics dm = getResources().getDisplayMetrics();
             dpi = dm.densityDpi;
@@ -290,7 +290,7 @@ public class RecorderService extends Service {
             main.post(new Runnable() {
                 @Override
                 public void run() {
-                    fail("Recording start nahi hui: " + msg);
+                    fail("Could not start recording: " + msg);
                 }
             });
         }
@@ -593,10 +593,10 @@ public class RecorderService extends Service {
                 message = "Video saved: Movies/FrameCast";
             } catch (Throwable t) {
                 Prefs.setLast(this, Uri.fromFile(tmp).toString(), tmp.getName(), dur);
-                message = "Gallery mein save nahi hua (" + t.getMessage() + ")";
+                message = "Could not save to Gallery (" + t.getMessage() + ")";
             }
         } else {
-            message = dur < 1500 ? "Recording bahut chhoti thi, save nahi hui" : "Recording save nahi hui";
+            message = dur < 1500 ? "Recording was too short, not saved" : "Could not save the recording";
         }
         final String msg = message;
         final boolean saved = uri != null;
@@ -676,7 +676,7 @@ public class RecorderService extends Service {
         Notification n = new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notif)
                 .setContentTitle("FrameCast is recording")
-                .setContentText("Stop dabane par video gallery mein save hogi")
+                .setContentText("Tap Stop to save the video to your Gallery")
                 .setContentIntent(appIntent())
                 .setOngoing(true)
                 .setColor(Ui.VERMILION)

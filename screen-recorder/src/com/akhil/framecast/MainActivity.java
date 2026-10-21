@@ -72,7 +72,7 @@ public class MainActivity extends Activity {
         TextView title = text("FrameCast", 30, 800, Ui.TEXT);
         title.setLetterSpacing(-0.02f);
         col.addView(title);
-        TextView sub = text("Screen record karo — video mein phone ka frame, cursor, arrow aur box sab dikhenge.", 14, 450, Ui.MUTED);
+        TextView sub = text("Record your screen inside a phone frame, with a cursor, arrows and boxes in the video.", 14, 450, Ui.MUTED);
         sub.setPadding(0, (int) (4 * dp), 0, (int) (16 * dp));
         col.addView(sub);
 
@@ -125,11 +125,11 @@ public class MainActivity extends Activity {
         col.addView(lc, cardLp());
 
         // Setup
-        col.addView(section("Setup (ek baar)"));
+        col.addView(section("One-time setup"));
         LinearLayout setup = card();
         overlayPill = pill();
-        setup.addView(row("Tools har screen ke upar",
-                "\"Display over other apps\" mein FrameCast ko Allow karein. Isse arrow, square, cursor aur panel har app ke upar dikhte hain.",
+        setup.addView(row("Tools over every screen",
+                "Allow FrameCast in \"Display over other apps\". This shows the arrow, square, cursor and tool panel on top of every app.",
                 overlayPill, new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
@@ -137,15 +137,15 @@ public class MainActivity extends Activity {
                     }
                 }));
         a11yPill = pill();
-        if (full) setup.addView(row("Asli click aur scroll",
-                "Accessibility → Installed apps → FrameCast cursor and tools → On.\nAgar \"Restricted setting\" likha aaye: App info → ⋮ (upar right) → Allow restricted settings, phir dobara On karein.",
+        if (full) setup.addView(row("Real click and scroll",
+                "Accessibility → Installed apps → FrameCast cursor and tools → On.\nIf it says \"Restricted setting\": App info → ⋮ (top right) → Allow restricted settings, then turn it on again.",
                 a11yPill, new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
                         openAccessibility();
                     }
                 }));
-        TextView appInfo = text("App info kholein", 13, 700, Ui.AMBER);
+        TextView appInfo = text("Open App info", 13, 700, Ui.AMBER);
         appInfo.setVisibility(full ? View.VISIBLE : View.GONE);
         appInfo.setPadding(0, (int) (2 * dp), 0, (int) (12 * dp));
         appInfo.setOnClickListener(new View.OnClickListener() {
@@ -156,7 +156,7 @@ public class MainActivity extends Activity {
         });
         setup.addView(appInfo);
         notifPill = pill();
-        notifRow = row("Notification", "Recording chalte waqt Stop button notification mein bhi milega.", notifPill,
+        notifRow = row("Notification", "While recording, a Stop button also appears in the notification.", notifPill,
                 new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
@@ -165,7 +165,7 @@ public class MainActivity extends Activity {
                 });
         setup.addView(notifRow);
         micPill = pill();
-        setup.addView(row("Microphone", "Aapki awaaz video ke saath record hogi (neeche Mic Off bhi kar sakte hain).", micPill,
+        setup.addView(row("Microphone", "Records your voice with the video (you can turn the mic off below).", micPill,
                 new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
@@ -215,20 +215,20 @@ public class MainActivity extends Activity {
         col.addView(opts, cardLp());
 
         // How to
-        col.addView(section("Kaise chalayein"));
+        col.addView(section("How to use"));
         LinearLayout how = card();
         String[][] steps = {
-                {"Arrow", "Arrow button dabao, screen par ungli kheencho — jahan chhodoge wahan arrow ki nok banegi."},
-                {"Square", "Square button dabao aur kheencho — box ban jayega."},
-                {"Mouse", "Angootha ghumao — cursor saath chalega. Ungli uthao — cursor wahin ruk jayega."},
-                full ? new String[]{"Click", "Jaldi se tap = wahan click. Daba ke rakho = sirf cursor ghoomega, click nahi hoga. Panel ka ◎ button = cursor ki jagah click."}
-                        : new String[]{"Click", "Jaldi se tap = video mein click ka nishaan. App ko asli mein chalane ke liye Mouse button dobara dabao (tool band) aur normal tap karo — cursor wahin dikhta rahega."},
-                full ? new String[]{"Scroll", "Mouse mode mein do ungliyon se upar / neeche kheencho, ya panel ke ⌃ ⌄ button dabao."}
-                        : new String[]{"Scroll", "Tool band karke normal scroll karein — recording chalti rahegi."},
-                {"Screenshot", "Camera button = phone frame ke saath photo, Gallery → Pictures/FrameCast."},
-                {"Phone normal", "Jo tool chalu hai use dobara dabao — tool band, phone normal chalega."},
-                {"Panel", "Upar timer ko kheench kar panel upar-neeche karo. Timer par tap = panel chhota / bada."},
-                {"Stop", "Laal ■ button ya notification ka Stop. Video Gallery → Movies/FrameCast mein save hogi."},
+                {"Arrow", "Tap Arrow, then drag on the screen. The arrow tip is where you lift your finger."},
+                {"Square", "Tap Square, then drag to draw a box."},
+                {"Mouse", "Move your thumb and the cursor follows. Lift your finger and the cursor stays there."},
+                full ? new String[]{"Click", "Quick tap = click there. Press and hold = only moves the cursor, no click. The ◎ button on the panel clicks at the cursor."}
+                        : new String[]{"Click", "Quick tap = shows a click mark in the video. To actually use the app, tap the Mouse button again (tool off) and tap normally. The cursor stays visible."},
+                full ? new String[]{"Scroll", "In Mouse mode, drag up / down with two fingers, or use the ⌃ ⌄ buttons on the panel."}
+                        : new String[]{"Scroll", "Turn the tool off and scroll normally. Recording keeps going."},
+                {"Screenshot", "The camera button saves a picture with the phone frame to Gallery → Pictures/FrameCast."},
+                {"Phone normal", "Tap the active tool again to turn it off and use your phone normally."},
+                {"Panel", "Drag the timer at the top to move the panel up or down. Tap the timer to shrink or expand the panel."},
+                {"Stop", "Tap the red ■ button or Stop in the notification. The video is saved to Gallery → Movies/FrameCast."},
         };
         for (String[] s : steps) {
             TextView h = text(s[0], 14, 700, Ui.AMBER);
@@ -238,7 +238,7 @@ public class MainActivity extends Activity {
         }
         col.addView(how, cardLp());
 
-        TextView foot = text("Panel ke buttons bhi video mein dikhte hain. Timer par tap karke panel chhota kar sakte hain.", 12, 450, Ui.MUTED);
+        TextView foot = text("The tool panel is kept out of the video. Only your screen, marks and cursor are recorded.", 12, 450, Ui.MUTED);
         foot.setPadding(0, (int) (14 * dp), 0, 0);
         col.addView(foot);
         return scroll;
@@ -403,15 +403,15 @@ public class MainActivity extends Activity {
         }
         if (!skipTools && !ControlService.isOn(this) && !Settings.canDrawOverlays(this)) {
             new AlertDialog.Builder(this, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
-                    .setTitle("Tools band hain")
-                    .setMessage("Arrow, square, cursor aur panel ke liye \"Display over other apps\" mein FrameCast ko Allow karein.")
-                    .setPositiveButton("Settings kholo", new android.content.DialogInterface.OnClickListener() {
+                    .setTitle("Tools are off")
+                    .setMessage("To use the arrow, square, cursor and panel, allow FrameCast in \"Display over other apps\".")
+                    .setPositiveButton("Open settings", new android.content.DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(android.content.DialogInterface d, int w) {
                             openOverlaySettings();
                         }
                     })
-                    .setNegativeButton("Bina tools ke record", new android.content.DialogInterface.OnClickListener() {
+                    .setNegativeButton("Record without tools", new android.content.DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(android.content.DialogInterface d, int w) {
                             skipTools = true;
@@ -452,7 +452,7 @@ public class MainActivity extends Activity {
         if (code == REQ_PERMS && pendingStart) {
             if (Build.VERSION.SDK_INT < 29 && !granted(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                 pendingStart = false;
-                Toast.makeText(this, "Video save karne ke liye Storage permission chahiye", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "Storage permission is needed to save the video", Toast.LENGTH_LONG).show();
                 return;
             }
             launchCapture();
@@ -465,7 +465,7 @@ public class MainActivity extends Activity {
         try {
             startActivityForResult(mpm.createScreenCaptureIntent(), REQ_CAPTURE);
         } catch (ActivityNotFoundException e) {
-            Toast.makeText(this, "Is phone par screen recording support nahi hai", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "This phone does not support screen recording", Toast.LENGTH_LONG).show();
         }
     }
 
@@ -474,7 +474,7 @@ public class MainActivity extends Activity {
         super.onActivityResult(req, result, data);
         if (req != REQ_CAPTURE) return;
         if (result != RESULT_OK || data == null) {
-            Toast.makeText(this, "Screen record ki permission nahi mili", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Screen recording permission was not given", Toast.LENGTH_SHORT).show();
             return;
         }
         Intent s = new Intent(this, RecorderService.class)
@@ -484,10 +484,10 @@ public class MainActivity extends Activity {
         try {
             startForegroundService(s);
         } catch (Throwable t) {
-            Toast.makeText(this, "Recording start nahi hui: " + t.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Could not start recording: " + t.getMessage(), Toast.LENGTH_LONG).show();
             return;
         }
-        Toast.makeText(this, "3 second mein recording shuru", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Recording starts in 3 seconds", Toast.LENGTH_SHORT).show();
         moveTaskToBack(true);
     }
 
@@ -519,7 +519,7 @@ public class MainActivity extends Activity {
         if (s == null) return;
         Uri uri = Uri.parse(s);
         if ("file".equals(uri.getScheme())) {
-            Toast.makeText(this, "Video app ke andar save hui: " + uri.getPath(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Video saved inside the app: " + uri.getPath(), Toast.LENGTH_LONG).show();
             return;
         }
         Intent i;
@@ -533,7 +533,7 @@ public class MainActivity extends Activity {
         try {
             startActivity(i);
         } catch (Throwable t) {
-            Toast.makeText(this, "Video kholne wala app nahi mila", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "No app found to open the video", Toast.LENGTH_SHORT).show();
         }
     }
 }

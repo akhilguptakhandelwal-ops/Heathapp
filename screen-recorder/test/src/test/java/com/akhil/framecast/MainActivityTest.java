@@ -35,8 +35,8 @@ public class MainActivityTest {
         MainActivity a = Robolectric.buildActivity(MainActivity.class).setup().get();
         ScrollView root = (ScrollView) ((ViewGroup) a.findViewById(android.R.id.content)).getChildAt(0);
         View col = root.getChildAt(0);
-        for (String s : new String[]{"FrameCast", "Start recording", "Tools har screen ke upar", "Microphone", "Screenshot",
-                "9:16 Shorts", "16:9 YouTube", "Graphite", "Terracotta", "KAISE CHALAYEIN", "Scroll"}) {
+        for (String s : new String[]{"FrameCast", "Start recording", "Tools over every screen", "Microphone", "Screenshot",
+                "9:16 Shorts", "16:9 YouTube", "Graphite", "Terracotta", "HOW TO USE", "Scroll"}) {
             assertTrue("missing: " + s, hasText(col, s));
         }
         int w = 1080;
