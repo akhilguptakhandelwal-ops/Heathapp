@@ -34,8 +34,9 @@ public class ReviewActivity extends Activity {
     private float dp;
     private VideoView video;
     private RangeBar range;
-    private TextView times, playBtn, saveBtn, status;
-    private boolean busy;
+    private TextView times, playBtn, saveBtn, status, voiceKeep, voiceRemove;
+    private boolean busy, removeVoice;
+    private MediaPlayer player;
     private final Handler main = new Handler(Looper.getMainLooper());
 
     /** Opens the review for the waiting recording, if there is one. */
@@ -67,6 +68,8 @@ public class ReviewActivity extends Activity {
         video.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
             @Override
             public void onPrepared(MediaPlayer mp) {
+                player = mp;
+                applyVolume();
                 if (mp.getDuration() > 0) durationMs = mp.getDuration();
                 range.setMinGap(Math.min(0.5f, 1000f / Math.max(1000, durationMs)));
                 updateTimes();
@@ -101,7 +104,7 @@ public class ReviewActivity extends Activity {
         col.setPadding(pad, (int) (16 * dp), pad, (int) (16 * dp));
 
         col.addView(text("Your recording", 24, 800, Ui.TEXT));
-        TextView sub = text("Watch it, trim the start or end if you like, then save.", 13, 450, Ui.MUTED);
+        TextView sub = text("Watch it, trim the start or end, keep or remove the voice, then save.", 13, 450, Ui.MUTED);
         sub.setPadding(0, (int) (2 * dp), 0, (int) (10 * dp));
         col.addView(sub);
 
@@ -152,6 +155,34 @@ public class ReviewActivity extends Activity {
         times.setGravity(Gravity.CENTER_HORIZONTAL);
         col.addView(times);
 
+        // Voice: keep or remove.
+        LinearLayout voice = new LinearLayout(this);
+        voice.setGravity(Gravity.CENTER);
+        voice.setPadding(0, (int) (12 * dp), 0, 0);
+        TextView vl = text("Voice", 13, 700, Ui.MUTED);
+        vl.setPadding(0, 0, (int) (10 * dp), 0);
+        voice.addView(vl);
+        voiceKeep = chip("Keep");
+        voiceRemove = chip("Remove");
+        voiceKeep.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                setRemoveVoice(false);
+            }
+        });
+        voiceRemove.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                setRemoveVoice(true);
+            }
+        });
+        voice.addView(voiceKeep);
+        View vg = new View(this);
+        voice.addView(vg, new LinearLayout.LayoutParams((int) (8 * dp), 1));
+        voice.addView(voiceRemove);
+        col.addView(voice);
+        styleVoice();
+
         status = text("", 13, 600, Ui.AMBER);
         status.setGravity(Gravity.CENTER_HORIZONTAL);
         status.setPadding(0, (int) (6 * dp), 0, 0);
@@ -198,6 +229,38 @@ public class ReviewActivity extends Activity {
         return t;
     }
 
+    private TextView chip(String s) {
+        TextView c = text(s, 14, 700, Ui.TEXT);
+        c.setPadding((int) (16 * dp), (int) (7 * dp), (int) (16 * dp), (int) (7 * dp));
+        return c;
+    }
+
+    private void styleVoice() {
+        TextView[] t = {voiceKeep, voiceRemove};
+        for (int i = 0; i < 2; i++) {
+            boolean on = (i == 1) == removeVoice;
+            int onColor = i == 1 ? Ui.VERMILION : Ui.AMBER;
+            t[i].setTextColor(on ? (i == 1 ? 0xFFFFF6EA : Ui.INK_DARK) : Ui.TEXT);
+            t[i].setBackground(on ? Ui.round(onColor, 30 * dp)
+                    : Ui.round(0x00000000, 30 * dp, Math.max(1, (int) dp), 0x55A89D8E));
+        }
+    }
+
+    void setRemoveVoice(boolean r) {
+        removeVoice = r;
+        styleVoice();
+        applyVolume();
+        updateTimes();
+    }
+
+    /** The preview plays muted when the voice will be removed. */
+    private void applyVolume() {
+        try {
+            if (player != null) player.setVolume(removeVoice ? 0f : 1f, removeVoice ? 0f : 1f);
+        } catch (Throwable ignored) {
+        }
+    }
+
     private static String clock(long ms) {
         long s = Math.max(0, ms) / 1000;
         return String.format(Locale.US, "%d:%02d", s / 60, s % 60);
@@ -210,7 +273,9 @@ public class ReviewActivity extends Activity {
     private void updateTimes() {
         long a = (long) (range.start() * durationMs), b = (long) (range.end() * durationMs);
         times.setText("Start " + clock(a) + "   ·   End " + clock(b) + "   ·   Keeps " + clock(b - a));
-        saveBtn.setText(trimmed() ? "Trim & Save" : "Save");
+        String label = trimmed() ? "Trim & Save" : "Save";
+        if (removeVoice) label += " (no voice)";
+        saveBtn.setText(label);
     }
 
     // ------------------------------------------------------------- playback
@@ -251,9 +316,10 @@ public class ReviewActivity extends Activity {
         busy = true;
         if (video.isPlaying()) video.pause();
         final boolean cut = trimmed();
+        final boolean noVoice = removeVoice;
         final long startUs = (long) (range.start() * durationMs) * 1000L;
         final long endUs = (long) (range.end() * durationMs) * 1000L;
-        status.setText(cut ? "Trimming and saving…" : "Saving…");
+        status.setText(cut || noVoice ? "Making your video…" : "Saving…");
         saveBtn.setAlpha(0.5f);
         new Thread(new Runnable() {
             @Override
@@ -262,11 +328,12 @@ public class ReviewActivity extends Activity {
                 boolean ok = false;
                 File out = file;
                 try {
-                    if (cut) {
-                        out = new File(file.getParentFile(), "trimmed_" + file.getName());
+                    if (cut || noVoice) {
+                        out = new File(file.getParentFile(), "edited_" + file.getName());
                         //noinspection ResultOfMethodCallIgnored
                         out.delete();
-                        Trimmer.trim(file.getAbsolutePath(), out.getAbsolutePath(), startUs, endUs);
+                        long s0 = cut ? startUs : 0, s1 = cut ? endUs : Long.MAX_VALUE;
+                        Trimmer.trim(file.getAbsolutePath(), out.getAbsolutePath(), s0, s1, !noVoice);
                     }
                     String name = "FrameCast_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".mp4";
                     Uri uri = Saver.save(ReviewActivity.this, out, name);

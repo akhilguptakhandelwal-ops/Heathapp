@@ -17,6 +17,11 @@ final class Trimmer {
     }
 
     static void trim(String src, String dst, long startUs, long endUs) throws Exception {
+        trim(src, dst, startUs, endUs, true);
+    }
+
+    /** {@code keepAudio = false} leaves the voice out (video only). */
+    static void trim(String src, String dst, long startUs, long endUs, boolean keepAudio) throws Exception {
         MediaExtractor ex = new MediaExtractor();
         MediaMuxer mux = null;
         try {
@@ -29,7 +34,7 @@ final class Trimmer {
             for (int i = 0; i < n; i++) {
                 MediaFormat f = ex.getTrackFormat(i);
                 String mime = f.getString(MediaFormat.KEY_MIME);
-                if (mime == null || !(mime.startsWith("video/") || mime.startsWith("audio/"))) {
+                if (mime == null || !(mime.startsWith("video/") || (keepAudio && mime.startsWith("audio/")))) {
                     map[i] = -1;
                     continue;
                 }

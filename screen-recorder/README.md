@@ -5,7 +5,7 @@ Android app. Records your phone screen with your voice. Two styles:
 - **Phone frame** — the screen sits inside a phone (body, camera hole, side buttons, shadow, background); video 9:16 or 16:9.
 - **Normal** — plain screen recording, same shape as your phone.
 
-720p / 1080p. After you stop, a review screen opens: watch, **Trim** the start / end, then **Save** or **Discard**.
+720p / 1080p. After you stop, a review screen opens: watch, **Trim** the start / end, **Keep or Remove the voice**, then **Save** or **Discard**.
 
 **Download:** [FrameCast.apk](../../../releases/download/framecast-latest/FrameCast.apk) (rebuilt by GitHub Actions on every push).
 

@@ -48,6 +48,12 @@ public class ReviewActivityTest {
         assertTrue(hasText(root, "Save"));
         assertTrue(hasText(root, "Discard"));
         assertTrue(hasText(root, "Keeps 1:05"));
+        assertTrue(hasText(root, "Voice"));
+        assertTrue(hasText(root, "Remove"));
+        c.get().setRemoveVoice(true);
+        assertTrue(hasText(root, "Save (no voice)"));
+        c.get().setRemoveVoice(false);
+        assertFalse(hasText(root, "(no voice)"));
         assertFalse(c.get().isFinishing());
     }
 
