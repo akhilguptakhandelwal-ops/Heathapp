@@ -1,19 +1,18 @@
 package com.akhil.framecast;
 
 import android.content.Context;
-import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.Rect;
 import android.graphics.RectF;
 import android.view.View;
 
 import java.util.ArrayList;
 
 /**
- * Full-screen drawing layer used in Freeze mode: shows the frozen screen
- * picture and the arrows / boxes / pen lines drawn on it. Everything is kept
+ * Full-screen drawing layer used in Draw mode: clear (the live screen shows
+ * through at full quality) or a plain white / black board, with the arrows,
+ * boxes and pen lines drawn on it. Everything is kept
  * in real screen coordinates.
  */
 final class InkView extends View {
@@ -28,15 +27,11 @@ final class InkView extends View {
     private final ArrayList<Shape> shapes = new ArrayList<>();
     private Shape current;
 
-    private Bitmap frozen;
     private int boardColor;          // 0 = none, else a solid board (white / black)
-    private int screenW, screenH;
-    private final Rect frozenDst = new Rect();
 
     private final float dp;
     private final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint head = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint picture = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Path path = new Path();
     private final RectF rect = new RectF();
     private final int[] loc = new int[2];
@@ -56,14 +51,6 @@ final class InkView extends View {
     /** Solid board behind the marks (0 = none). */
     synchronized void setBoard(int color) {
         boardColor = color;
-        invalidate();
-    }
-
-    /** The picture shown behind the marks (null = see-through). */
-    synchronized void setFrozen(Bitmap b, int w, int h) {
-        frozen = b;
-        screenW = w;
-        screenH = h;
         invalidate();
     }
 
@@ -135,10 +122,6 @@ final class InkView extends View {
         c.translate(-loc[0], -loc[1]);
         synchronized (this) {
             if (boardColor != 0) c.drawColor(boardColor);
-            else if (frozen != null && !frozen.isRecycled() && screenW > 0) {
-                frozenDst.set(0, 0, screenW, screenH);
-                c.drawBitmap(frozen, null, frozenDst, picture);
-            }
         }
         drawMarks(c);
         c.restore();

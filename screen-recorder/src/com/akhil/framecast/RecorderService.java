@@ -176,32 +176,7 @@ public class RecorderService extends Service {
     /** Tool panel ("display over other apps"); null if that permission is off. */
     private OverlayController makeOverlay() {
         if (!Settings.canDrawOverlays(this)) return null;
-        return new OverlayController(this, new OverlayController.Snapshotter() {
-            @Override
-            public void snapshot(final OverlayController.SnapshotDone done) {
-                render.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        Bitmap copy = null;
-                        try {
-                            if (capturing && shot != null && shotW > 0 && shotH > 0) {
-                                copy = Bitmap.createBitmap(shot, 0, 0, shotW, shotH);
-                                if (copy == shot) copy = shot.copy(Bitmap.Config.ARGB_8888, false);
-                            }
-                        } catch (Throwable ignored) {
-                            copy = null;
-                        }
-                        final Bitmap b = copy;
-                        main.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                done.done(b);
-                            }
-                        });
-                    }
-                });
-            }
-        });
+        return new OverlayController(this);
     }
 
     private void toast(final String msg) {

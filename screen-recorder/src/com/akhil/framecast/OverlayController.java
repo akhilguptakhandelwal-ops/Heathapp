@@ -23,8 +23,9 @@ import android.widget.TextView;
  * <ul>
  *   <li><b>Live</b> (default): only the small panel is on screen, so the phone
  *       works completely normally.</li>
- *   <li><b>Draw</b>: the screen picture is frozen under a full-screen layer
- *       and you draw arrows, boxes and pen lines on it.</li>
+ *   <li><b>Draw</b>: a clear full-screen layer catches your finger, so the app
+ *       below stays still, and you draw arrows, boxes and pen lines on top.
+ *       The real screen stays visible at full quality (no copied picture).</li>
  *   <li><b>White / Black board</b>: same, on a plain white or black page.</li>
  *   <li>Back to <b>Live</b>: all marks are removed and the phone works again.</li>
  * </ul>
@@ -33,20 +34,10 @@ import android.widget.TextView;
 final class OverlayController {
     static final int ARROW = InkView.ARROW, SQUARE = InkView.BOX, PEN = InkView.PEN;
 
-    /** Gets the current screen picture (or null) for Freeze mode. */
-    interface Snapshotter {
-        void snapshot(SnapshotDone done);
-    }
-
-    interface SnapshotDone {
-        void done(Bitmap b);
-    }
-
     private final Context ctx;
     private final WindowManager wm;
     private final Handler h = new Handler(Looper.getMainLooper());
     private final float dp;
-    private final Snapshotter snapshotter;
 
     private volatile InkView ink;
     private LinearLayout panel, drawTools, boards;
@@ -55,15 +46,13 @@ final class OverlayController {
     private WindowManager.LayoutParams inkLp, panelLp;
 
     private boolean shown, collapsed, frozen, freezing, inkAttached;
-    private int board;     // 0 = frozen screen picture, else the board colour
+    private int board;     // 0 = draw on the live screen, else the board colour
     private int tool = ARROW;
     private int colorIdx;
-    private Bitmap frozenPicture;
     private final int[] loc = new int[2];
 
-    OverlayController(Context c, Snapshotter s) {
+    OverlayController(Context c) {
         ctx = c;
-        snapshotter = s;
         wm = (WindowManager) c.getSystemService(Context.WINDOW_SERVICE);
         dp = Ui.dp(c, 1);
     }
@@ -94,8 +83,6 @@ final class OverlayController {
         frozen = false;
         freezing = false;
         collapsed = false;
-        if (frozenPicture != null) frozenPicture.recycle();
-        frozenPicture = null;
     }
 
     private void removeQuietly(View v) {
@@ -126,37 +113,21 @@ final class OverlayController {
             return;
         }
         board = 0;
-        freezing = true;
-        if (snapshotter == null) {
-            enterFreeze(null);
-            return;
-        }
-        snapshotter.snapshot(new SnapshotDone() {
-            @Override
-            public void done(Bitmap b) {
-                enterFreeze(b);
-            }
-        });
+        enterFreeze();
     }
 
     /** Opens a plain white or black page to write on. */
     void openBoard(int color) {
         if (!shown || freezing || frozen) return;
         board = color;
-        enterFreeze(null);
+        enterFreeze();
     }
 
-    private void enterFreeze(Bitmap picture) {
+    private void enterFreeze() {
         freezing = false;
-        if (!shown || frozen) {
-            if (picture != null) picture.recycle();
-            return;
-        }
+        if (!shown || frozen) return;
         frozen = true;
-        frozenPicture = picture;
-        Point s = screenSize();
         ink.clear();
-        ink.setFrozen(picture, s.x, s.y);
         ink.setBoard(board);
         try {
             wm.addView(ink, inkLp);
@@ -184,12 +155,9 @@ final class OverlayController {
         frozen = false;
         if (ink != null) {
             ink.clear();
-            ink.setFrozen(null, 0, 0);
             ink.setBoard(0);
         }
         removeInk();
-        if (frozenPicture != null) frozenPicture.recycle();
-        frozenPicture = null;
         updateButtons();
     }
 

@@ -72,7 +72,7 @@ public class MainActivity extends Activity {
         TextView title = text("FrameCast", 30, 800, Ui.TEXT);
         title.setLetterSpacing(-0.02f);
         col.addView(title);
-        TextView sub = text("Record your screen inside a phone frame, with your voice. Freeze the screen any time to draw arrows and boxes on it.", 14, 450, Ui.MUTED);
+        TextView sub = text("Record your screen (with or without a phone frame) and your voice. Draw arrows, boxes and notes on top any time.", 14, 450, Ui.MUTED);
         sub.setPadding(0, (int) (4 * dp), 0, (int) (16 * dp));
         col.addView(sub);
 
@@ -229,13 +229,13 @@ public class MainActivity extends Activity {
         LinearLayout how = card();
         String[][] steps = {
                 {"Live", "While recording, your phone works normally. Tap, scroll and open apps as usual."},
-                {"Draw", "Tap the pencil (Draw) button. The screen freezes and you can draw on it: Arrow, Square or Pen. Change colour or Undo on the panel."},
+                {"Draw", "Tap the pencil (Draw) button. The screen stays exactly as it is (full quality) and your finger now draws instead of tapping the app: Arrow, Square or Pen. Change colour, Undo or Clear on the panel."},
                 {"White / Black board", "Tap White or Black on the panel for a blank page. Write on it with your finger. Tap ▶ Live to close it."},
                 {"Back to Live", "Tap the same button again (now ▶ Live). All marks are removed and the phone works again."},
                 {"Screenshot", "The camera button saves a picture with the phone frame to Gallery → Pictures/FrameCast."},
                 {"Panel", "Drag the panel anywhere, even almost off the screen, so it never covers important words. Tap the timer to shrink or expand it."},
                 {"My recordings", "Open folder shows all your videos and screenshots. Play, Share or Delete each one."},
-                {"Stop", "Tap the red ■ button or Stop in the notification. The video is saved to Gallery → Movies/FrameCast."},
+                {"Stop", "Tap the red ■ button or Stop in the notification. Then cut out any parts, keep or remove the voice, and Save to Gallery → Movies/FrameCast."},
         };
         for (String[] s : steps) {
             TextView h = text(s[0], 14, 700, Ui.AMBER);

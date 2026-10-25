@@ -24,7 +24,8 @@ import java.util.Date;
 import java.util.Locale;
 
 /**
- * Opens after a recording: watch it, trim the start / end, then Save or Discard.
+ * Opens after a recording: watch it, cut out any parts (start, middle, end,
+ * as many as you like), keep or remove the voice, then Save or Discard.
  * The recording waits in app storage until you decide, so nothing is lost if
  * the app closes; it opens here again next time.
  */
@@ -37,6 +38,8 @@ public class ReviewActivity extends Activity {
     private TextView times, playBtn, saveBtn, status, voiceKeep, voiceRemove;
     private boolean busy, removeVoice;
     private MediaPlayer player;
+    /** Parts removed so far, each {from, to} as fractions 0..1 of the video. */
+    private final java.util.ArrayList<float[]> cuts = new java.util.ArrayList<>();
     private final Handler main = new Handler(Looper.getMainLooper());
 
     /** Opens the review for the waiting recording, if there is one. */
@@ -104,7 +107,7 @@ public class ReviewActivity extends Activity {
         col.setPadding(pad, (int) (16 * dp), pad, (int) (16 * dp));
 
         col.addView(text("Your recording", 24, 800, Ui.TEXT));
-        TextView sub = text("Watch it, trim the start or end, keep or remove the voice, then save.", 13, 450, Ui.MUTED);
+        TextView sub = text("Watch it, cut out any parts you don't want, keep or remove the voice, then save.", 13, 450, Ui.MUTED);
         sub.setPadding(0, (int) (2 * dp), 0, (int) (10 * dp));
         col.addView(sub);
 
@@ -134,7 +137,7 @@ public class ReviewActivity extends Activity {
         pl.topMargin = (int) (10 * dp);
         col.addView(playBtn, pl);
 
-        TextView trimLabel = text("TRIM — drag the handles to keep only the part you want", 11, 700, Ui.MUTED);
+        TextView trimLabel = text("CUT — select a part with the two handles, tap ✂ Cut. Repeat for more parts.", 11, 700, Ui.MUTED);
         trimLabel.setLetterSpacing(0.06f);
         trimLabel.setPadding(0, (int) (14 * dp), 0, (int) (2 * dp));
         col.addView(trimLabel);
@@ -143,6 +146,7 @@ public class ReviewActivity extends Activity {
             @Override
             public void changed(float start, float end, int which) {
                 updateTimes();
+                range.setPlayhead(-1);
                 if (video.isPlaying()) {
                     video.pause();
                     playBtn.setText("▶  Play");
@@ -150,10 +154,37 @@ public class ReviewActivity extends Activity {
                 video.seekTo((int) ((which == 0 ? start : end) * durationMs));
             }
         });
+        range.set(0.4f, 0.6f);
+        range.setCuts(cuts);
         col.addView(range);
         times = text("", 13, 600, Ui.TEXT);
         times.setGravity(Gravity.CENTER_HORIZONTAL);
         col.addView(times);
+
+        LinearLayout cutRow = new LinearLayout(this);
+        cutRow.setGravity(Gravity.CENTER);
+        cutRow.setPadding(0, (int) (8 * dp), 0, 0);
+        TextView cutBtn = button("✂  Cut selected part", 0xFFFFF6EA, Ui.VERMILION, 0);
+        cutBtn.setTextSize(14);
+        cutBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                cutSelection();
+            }
+        });
+        cutRow.addView(cutBtn);
+        View cg = new View(this);
+        cutRow.addView(cg, new LinearLayout.LayoutParams((int) (8 * dp), 1));
+        TextView undoBtn = button("Undo cut", Ui.TEXT, 0x00000000, 0x88D9A441);
+        undoBtn.setTextSize(14);
+        undoBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                undoCut();
+            }
+        });
+        cutRow.addView(undoBtn);
+        col.addView(cutRow);
 
         // Voice: keep or remove.
         LinearLayout voice = new LinearLayout(this);
@@ -266,31 +297,79 @@ public class ReviewActivity extends Activity {
         return String.format(Locale.US, "%d:%02d", s / 60, s % 60);
     }
 
-    private boolean trimmed() {
-        return range.start() > 0.001f || range.end() < 0.999f;
+    private boolean edited() {
+        return !cuts.isEmpty();
+    }
+
+    private long keptMs() {
+        float f = 0;
+        for (float[] k : Trimmer.keptParts(cuts)) f += k[1] - k[0];
+        return Math.round(f * (double) durationMs);
+    }
+
+    void cutSelection() {
+        float a = range.start(), b = range.end();
+        java.util.ArrayList<float[]> test = new java.util.ArrayList<>(cuts);
+        test.add(new float[]{a, b});
+        float left = 0;
+        for (float[] k : Trimmer.keptParts(test)) left += k[1] - k[0];
+        if (left * durationMs < 1000) {
+            Toast.makeText(this, "Keep at least 1 second of video", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        cuts.add(new float[]{a, b});
+        range.setCuts(cuts);
+        updateTimes();
+    }
+
+    void undoCut() {
+        if (cuts.isEmpty()) return;
+        cuts.remove(cuts.size() - 1);
+        range.setCuts(cuts);
+        updateTimes();
+    }
+
+    int cutCount() {
+        return cuts.size();
     }
 
     private void updateTimes() {
         long a = (long) (range.start() * durationMs), b = (long) (range.end() * durationMs);
-        times.setText("Start " + clock(a) + "   ·   End " + clock(b) + "   ·   Keeps " + clock(b - a));
-        String label = trimmed() ? "Trim & Save" : "Save";
+        String t = "Selected " + clock(a) + " – " + clock(b) + "   ·   Final video " + clock(keptMs());
+        if (!cuts.isEmpty()) t += "\n" + cuts.size() + (cuts.size() == 1 ? " part cut" : " parts cut");
+        times.setText(t);
+        String label = edited() ? "Cut & Save" : "Save";
         if (removeVoice) label += " (no voice)";
         saveBtn.setText(label);
     }
 
     // ------------------------------------------------------------- playback
 
-    private final Runnable watchEnd = new Runnable() {
+    /** While playing: jump over cut parts, move the playhead, stop at the end. */
+    private final Runnable watch = new Runnable() {
         @Override
         public void run() {
-            if (!video.isPlaying()) return;
-            long end = (long) (range.end() * durationMs);
-            if (range.end() < 0.999f && video.getCurrentPosition() >= end) {
-                video.pause();
-                playBtn.setText("▶  Play");
+            if (!video.isPlaying()) {
+                range.setPlayhead(-1);
                 return;
             }
-            main.postDelayed(this, 100);
+            float f = durationMs > 0 ? video.getCurrentPosition() / (float) durationMs : 0;
+            for (float[] k : cuts) {
+                float x = Math.min(k[0], k[1]), y = Math.max(k[0], k[1]);
+                if (f >= x && f < y) {
+                    if (y >= 0.999f) {
+                        video.pause();
+                        playBtn.setText("▶  Play");
+                        range.setPlayhead(-1);
+                        return;
+                    }
+                    video.seekTo((int) (y * durationMs));
+                    f = y;
+                    break;
+                }
+            }
+            range.setPlayhead(f);
+            main.postDelayed(this, 60);
         }
     };
 
@@ -301,12 +380,10 @@ public class ReviewActivity extends Activity {
             playBtn.setText("▶  Play");
             return;
         }
-        long start = (long) (range.start() * durationMs), end = (long) (range.end() * durationMs);
-        int pos = video.getCurrentPosition();
-        if (pos < start - 300 || pos >= end - 200) video.seekTo((int) start);
+        if (video.getCurrentPosition() >= durationMs - 300) video.seekTo(0);
         video.start();
         playBtn.setText("❚❚  Pause");
-        main.postDelayed(watchEnd, 100);
+        main.postDelayed(watch, 60);
     }
 
     // -------------------------------------------------------------- actions
@@ -315,10 +392,15 @@ public class ReviewActivity extends Activity {
         if (busy) return;
         busy = true;
         if (video.isPlaying()) video.pause();
-        final boolean cut = trimmed();
+        final boolean cut = edited();
         final boolean noVoice = removeVoice;
-        final long startUs = (long) (range.start() * durationMs) * 1000L;
-        final long endUs = (long) (range.end() * durationMs) * 1000L;
+        float[][] kept = Trimmer.keptParts(cuts);
+        final long[][] parts = new long[kept.length][2];
+        for (int i = 0; i < kept.length; i++) {
+            parts[i][0] = (long) (kept[i][0] * durationMs) * 1000L;
+            parts[i][1] = kept[i][1] >= 0.999f ? Long.MAX_VALUE : (long) (kept[i][1] * durationMs) * 1000L;
+        }
+        final long keptDuration = keptMs();
         status.setText(cut || noVoice ? "Making your video…" : "Saving…");
         saveBtn.setAlpha(0.5f);
         new Thread(new Runnable() {
@@ -332,13 +414,11 @@ public class ReviewActivity extends Activity {
                         out = new File(file.getParentFile(), "edited_" + file.getName());
                         //noinspection ResultOfMethodCallIgnored
                         out.delete();
-                        long s0 = cut ? startUs : 0, s1 = cut ? endUs : Long.MAX_VALUE;
-                        Trimmer.trim(file.getAbsolutePath(), out.getAbsolutePath(), s0, s1, !noVoice);
+                        Trimmer.keep(file.getAbsolutePath(), out.getAbsolutePath(), parts, !noVoice);
                     }
                     String name = "FrameCast_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".mp4";
                     Uri uri = Saver.save(ReviewActivity.this, out, name);
-                    long kept = cut ? (endUs - startUs) / 1000 : durationMs;
-                    Prefs.setLast(ReviewActivity.this, uri.toString(), name, kept);
+                    Prefs.setLast(ReviewActivity.this, uri.toString(), name, keptDuration);
                     //noinspection ResultOfMethodCallIgnored
                     file.delete();
                     if (out != file) {

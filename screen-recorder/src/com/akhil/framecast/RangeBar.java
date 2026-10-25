@@ -7,7 +7,10 @@ import android.graphics.RectF;
 import android.view.MotionEvent;
 import android.view.View;
 
-/** Track with a start and an end handle, for choosing the part to keep. */
+/**
+ * Video timeline: two handles select a part; parts already cut are shown in
+ * red; a thin line shows where the video is playing.
+ */
 final class RangeBar extends View {
     interface Listener {
         /** {@code which}: 0 = start moved, 1 = end moved. */
@@ -23,7 +26,11 @@ final class RangeBar extends View {
     private final Paint kept = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint handle = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint grip = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint cut = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint head = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF r = new RectF();
+    private java.util.List<float[]> cuts = new java.util.ArrayList<>();
+    private float playhead = -1;
 
     RangeBar(Context c) {
         super(c);
@@ -34,6 +41,20 @@ final class RangeBar extends View {
         grip.setColor(Ui.INK_DARK);
         grip.setStrokeWidth(2 * dp);
         grip.setStrokeCap(Paint.Cap.ROUND);
+        cut.setColor(0xCCE4572E);
+        head.setColor(0xFFF1EADF);
+        head.setStrokeWidth(2 * dp);
+    }
+
+    void setCuts(java.util.List<float[]> c) {
+        cuts = c;
+        invalidate();
+    }
+
+    /** 0..1, or below 0 to hide. */
+    void setPlayhead(float f) {
+        playhead = f;
+        invalidate();
     }
 
     void setListener(Listener l) {
@@ -81,8 +102,13 @@ final class RangeBar extends View {
         float h = getHeight(), top = h * 0.2f, bot = h * 0.8f;
         r.set(pad(), top, getWidth() - pad(), bot);
         c.drawRoundRect(r, 8 * dp, 8 * dp, track);
+        for (float[] k : cuts) {
+            r.set(xOf(Math.min(k[0], k[1])), top, xOf(Math.max(k[0], k[1])), bot);
+            c.drawRect(r, cut);
+        }
         r.set(xOf(start), top, xOf(end), bot);
         c.drawRect(r, kept);
+        if (playhead >= 0) c.drawLine(xOf(playhead), top - 4 * dp, xOf(playhead), bot + 4 * dp, head);
         drawHandle(c, xOf(start), top, bot);
         drawHandle(c, xOf(end), top, bot);
     }

@@ -44,10 +44,19 @@ public class ReviewActivityTest {
         ActivityController<ReviewActivity> c = Robolectric.buildActivity(ReviewActivity.class).setup();
         View root = c.get().findViewById(android.R.id.content);
         assertTrue(hasText(root, "Your recording"));
-        assertTrue(hasText(root, "TRIM"));
+        assertTrue(hasText(root, "CUT"));
+        assertTrue(hasText(root, "Cut selected part"));
+        assertTrue(hasText(root, "Undo cut"));
         assertTrue(hasText(root, "Save"));
         assertTrue(hasText(root, "Discard"));
-        assertTrue(hasText(root, "Keeps 1:05"));
+        assertTrue(hasText(root, "Final video 1:05"));
+        // Cut 0:26-0:39 (the default 40%-60% selection): 13 s gone.
+        c.get().cutSelection();
+        assertTrue(hasText(root, "1 part cut"));
+        assertTrue(hasText(root, "Final video 0:52"));
+        assertTrue(hasText(root, "Cut & Save"));
+        c.get().undoCut();
+        assertTrue(hasText(root, "Final video 1:05"));
         assertTrue(hasText(root, "Voice"));
         assertTrue(hasText(root, "Remove"));
         c.get().setRemoveVoice(true);

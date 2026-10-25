@@ -2,7 +2,6 @@ package com.akhil.framecast;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -45,12 +44,7 @@ public class OverlayTest {
     public void setUp() {
         Context c = RuntimeEnvironment.getApplication();
         screen = PreviewView.fakeScreen(W, H);
-        o = new OverlayController(c, new OverlayController.Snapshotter() {
-            @Override
-            public void snapshot(OverlayController.SnapshotDone done) {
-                done.done(screen.copy(Bitmap.Config.ARGB_8888, false));
-            }
-        });
+        o = new OverlayController(c);
         o.show();
         idle(100);
         t = SystemClock.uptimeMillis();
@@ -115,7 +109,7 @@ public class OverlayTest {
         click("bFreeze");
         assertTrue(o.isFrozen());
         assertTrue((Boolean) field("inkAttached"));
-        assertNotNull(field("frozenPicture"));
+        assertEquals(WindowManager.LayoutParams.MATCH_PARENT, ((WindowManager.LayoutParams) field("inkLp")).width);
         LinearLayout tools = field("drawTools");
         assertEquals(View.VISIBLE, tools.getVisibility());
 
@@ -152,17 +146,21 @@ public class OverlayTest {
     }
 
     @Test
-    public void freezeWorksEvenWithoutAPicture() {
-        o.hide();
-        o = new OverlayController(RuntimeEnvironment.getApplication(), new OverlayController.Snapshotter() {
-            @Override
-            public void snapshot(OverlayController.SnapshotDone done) {
-                done.done(null);   // recording not started yet
-            }
-        });
-        o.show();
+    public void drawLayerIsClearSoTheRealScreenStaysSharp() {
         click("bFreeze");
         assertTrue(o.isFrozen());
+        // Nothing drawn yet: the layer adds nothing on top of the real screen.
+        Bitmap layer = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
+        View ink = ink();
+        ink.measure(View.MeasureSpec.makeMeasureSpec(W, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(H, View.MeasureSpec.EXACTLY));
+        ink.layout(0, 0, W, H);
+        ink.draw(new Canvas(layer));
+        for (int y = 0; y < H; y += 97) {
+            for (int x = 0; x < W; x += 61) {
+                assertEquals("layer must be see-through", 0, layer.getPixel(x, y) >>> 24);
+            }
+        }
         touch(MotionEvent.ACTION_DOWN, t, 200, 200);
         touch(MotionEvent.ACTION_UP, t + 50, 800, 900);
         assertEquals(1, ink().count());
@@ -183,8 +181,8 @@ public class OverlayTest {
         }
         touch(MotionEvent.ACTION_UP, t + 450, 630, 1950);
 
-        // What the phone shows: frozen picture + marks (ink window) + panel on top.
-        Bitmap live = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
+        // What the phone shows: the real screen + marks (clear ink window) + panel on top.
+        Bitmap live = screen.copy(Bitmap.Config.ARGB_8888, true);
         Canvas c = new Canvas(live);
         View ink = ink();
         ink.measure(View.MeasureSpec.makeMeasureSpec(W, View.MeasureSpec.EXACTLY),
@@ -230,7 +228,7 @@ public class OverlayTest {
         assertTrue("box edge under the panel missing", Shots.dist(edge, Ui.INK[0]) < 60);
         // The frozen picture is what shows on the screen (a card colour from the fake screen).
         int card = out.getPixel((int) (s.left + 160 * k), (int) (s.top + 360 * k));
-        assertTrue("frozen screen missing", Shots.dist(card, screen.getPixel(160, 360)) < 40);
+        assertTrue("real screen missing", Shots.dist(card, screen.getPixel(160, 360)) < 40);
     }
 
     private void boardShot(int color, String file) {
