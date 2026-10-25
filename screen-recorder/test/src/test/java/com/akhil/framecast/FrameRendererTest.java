@@ -88,4 +88,20 @@ public class FrameRendererTest {
         int p = out.getPixel((int) s.centerX(), (int) s.centerY());
         assertTrue("black screen before first frame", Shots.dist(p, Color.BLACK) < 30);
     }
+
+    @Test
+    public void normalStyleIsJustTheScreen() {
+        FrameRenderer fr = new FrameRenderer(1080, 2400, 0, 0, true);
+        fr.layout(1080f / 2400f);
+        assertEquals(1080, fr.capW);
+        assertEquals(2400, fr.capH);
+        Bitmap content = PreviewView.fakeScreen(fr.capW, fr.capH);
+        Bitmap out = Bitmap.createBitmap(1080, 2400, Bitmap.Config.ARGB_8888);
+        fr.draw(new Canvas(out), content, fr.capW, fr.capH);
+        // Corners and middle are the screen itself: no frame, no rounded corners, no background.
+        assertTrue(Shots.dist(out.getPixel(1, 1), content.getPixel(1, 1)) < 12);
+        assertTrue(Shots.dist(out.getPixel(1078, 2398), content.getPixel(1078, 2398)) < 12);
+        assertTrue(Shots.dist(out.getPixel(540, 1400), content.getPixel(540, 1400)) < 12);
+        Shots.save(Bitmap.createScaledBitmap(out, 540, 1200, true), "normal_style_frame.png");
+    }
 }

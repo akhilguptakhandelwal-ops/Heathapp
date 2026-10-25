@@ -38,7 +38,15 @@ public final class FrameRenderer {
         void draw(Canvas c);
     }
 
+    /** Normal style: just the screen, no phone frame or background. */
+    private final boolean plain;
+
     public FrameRenderer(int outW, int outH, int phone, int background) {
+        this(outW, outH, phone, background, false);
+    }
+
+    public FrameRenderer(int outW, int outH, int phone, int background, boolean plain) {
+        this.plain = plain;
         this.outW = outW;
         this.outH = outH;
         this.rim = Prefs.PHONE_COLORS[clamp(phone, Prefs.PHONE_COLORS.length)];
@@ -55,6 +63,20 @@ public final class FrameRenderer {
 
     /** Lays the phone out for a screen with the given width / height ratio. */
     public void layout(float aspect) {
+        if (plain) {
+            // The screen fills the video (thin black bars only if the shapes differ).
+            float t = Math.min(outW / aspect, outH);
+            capW = even(aspect * t);
+            capH = even(t);
+            float cx = outW / 2f, cy = outH / 2f;
+            screen.set(cx - capW / 2f, cy - capH / 2f, cx + capW / 2f, cy + capH / 2f);
+            screenRadius = 0;
+            screenClip.reset();
+            screenClip.addRect(screen, android.graphics.Path.Direction.CW);
+            if (base != null) base.recycle();
+            base = null;
+            return;
+        }
         final float k = 0.045f;                 // bezel, relative to the short screen side
         float mn = Math.min(aspect, 1f);
         float availW = outW * 0.86f, availH = outH * 0.88f;
@@ -166,12 +188,13 @@ public final class FrameRenderer {
      */
     public void draw(Canvas c, Bitmap shot, int shotW, int shotH, Marks marks, float screenW, float screenH) {
         // 1. black screen, 2. the captured picture, 3. the frame on top (it has a hole for the screen).
-        c.drawRect(screen, black);
+        if (plain) c.drawColor(0xFF000000);
+        else c.drawRect(screen, black);
         if (shot != null && !shot.isRecycled() && shotW > 0 && shotH > 0) {
             srcRect.set(0, 0, Math.min(shotW, shot.getWidth()), Math.min(shotH, shot.getHeight()));
             c.drawBitmap(shot, srcRect, screen, shotPaint);
         }
-        c.drawBitmap(base, 0, 0, null);
+        if (base != null) c.drawBitmap(base, 0, 0, null);
         if (marks != null && screenW > 0 && screenH > 0) {
             c.save();
             c.clipPath(screenClip);
@@ -180,6 +203,7 @@ public final class FrameRenderer {
             marks.draw(c);
             c.restore();
         }
+        if (plain) return;
         // Punch-hole camera.
         c.drawCircle(camX, camY, camR, black);
         c.drawCircle(camX, camY, camR * 0.55f, lens);

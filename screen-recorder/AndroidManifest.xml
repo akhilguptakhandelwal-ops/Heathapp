@@ -39,6 +39,11 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
+        <activity
+            android:name=".ReviewActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
         <service
             android:name=".RecorderService"
             android:exported="false"

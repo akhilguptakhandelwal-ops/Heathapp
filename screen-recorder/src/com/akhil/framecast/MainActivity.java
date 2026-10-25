@@ -46,6 +46,8 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         refresh();
+        // A finished recording waits for Save / Trim / Discard.
+        if (!RecorderService.running) ReviewActivity.openIfPending(this);
     }
 
     @Override
@@ -169,7 +171,17 @@ public class MainActivity extends Activity {
         // Options
         col.addView(section("Video"));
         LinearLayout opts = card();
+        opts.addView(label("Recording style"));
+        opts.addView(chips(Prefs.STYLES, prefs.style, new Pick() {
+            @Override
+            public void on(int i) {
+                prefs.style = i;
+                showFrameOptions();
+            }
+        }));
+        frameOnly.add(opts.getChildCount());
         opts.addView(label("Shape"));
+        frameOnly.add(opts.getChildCount());
         opts.addView(chips(Prefs.SHAPES, prefs.shape, new Pick() {
             @Override
             public void on(int i) {
@@ -183,14 +195,18 @@ public class MainActivity extends Activity {
                 prefs.quality = i;
             }
         }));
+        frameOnly.add(opts.getChildCount());
         opts.addView(label("Phone colour"));
+        frameOnly.add(opts.getChildCount());
         opts.addView(chips(Prefs.PHONES, prefs.phone, new Pick() {
             @Override
             public void on(int i) {
                 prefs.phone = i;
             }
         }));
+        frameOnly.add(opts.getChildCount());
         opts.addView(label("Background"));
+        frameOnly.add(opts.getChildCount());
         opts.addView(chips(Prefs.BACKGROUNDS, prefs.background, new Pick() {
             @Override
             public void on(int i) {
@@ -205,6 +221,8 @@ public class MainActivity extends Activity {
             }
         }));
         col.addView(opts, cardLp());
+        optsCard = opts;
+        showFrameOptions();
 
         // How to
         col.addView(section("How to use"));
@@ -231,6 +249,15 @@ public class MainActivity extends Activity {
         foot.setPadding(0, (int) (14 * dp), 0, 0);
         col.addView(foot);
         return scroll;
+    }
+
+    private final ArrayList<Integer> frameOnly = new ArrayList<>();
+    private LinearLayout optsCard;
+
+    /** Shape, phone colour and background only matter for the Phone frame style. */
+    private void showFrameOptions() {
+        if (optsCard == null) return;
+        for (int i : frameOnly) optsCard.getChildAt(i).setVisibility(prefs.plain() ? View.GONE : View.VISIBLE);
     }
 
     private interface Pick {

@@ -26,11 +26,19 @@ final class PreviewView extends View {
     }
 
     void refresh() {
-        int[] out = prefs.outputSize(true);
-        int w = out[0] / 2, h = out[1] / 2;   // half of 720p is plenty for a preview
-        FrameRenderer fr = new FrameRenderer(w, h, prefs.phone, prefs.background);
         Point real = screenSize();
-        fr.layout(real.x / (float) real.y);
+        float aspect = real.x / (float) real.y;
+        int w, h;
+        if (prefs.plain()) {
+            w = 360;                              // just the screen, like the real video
+            h = Math.round(360 / aspect / 2) * 2;
+        } else {
+            int[] out = prefs.outputSize(true);
+            w = out[0] / 2;                       // half of 720p is plenty for a preview
+            h = out[1] / 2;
+        }
+        FrameRenderer fr = new FrameRenderer(w, h, prefs.phone, prefs.background, prefs.plain());
+        fr.layout(aspect);
         Bitmap shot = fakeScreen(fr.capW, fr.capH);
         if (frame != null) frame.recycle();
         frame = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);

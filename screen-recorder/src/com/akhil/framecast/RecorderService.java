@@ -299,9 +299,14 @@ public class RecorderService extends Service {
             screenH = real.y;
             float aspect = real.x / (float) real.y;
             lastPortrait = real.y >= real.x;
-            if (!setupEncoder(prefs.outputSize(false), aspect) && !setupEncoder(prefs.outputSize(true), aspect)) {
-                throw new IllegalStateException("The video encoder did not work on this phone");
+            boolean ok = false;
+            for (int[] size : prefs.outputCandidates(aspect)) {
+                if (setupEncoder(size, aspect)) {
+                    ok = true;
+                    break;
+                }
             }
+            if (!ok) throw new IllegalStateException("The video encoder did not work on this phone");
             DisplayMetrics dm = getResources().getDisplayMetrics();
             dpi = dm.densityDpi;
             reader = newReader(fr.capW, fr.capH);
@@ -352,7 +357,7 @@ public class RecorderService extends Service {
         MediaCodec c = null;
         FrameRenderer f = null;
         try {
-            f = new FrameRenderer(size[0], size[1], prefs.phone, prefs.background);
+            f = new FrameRenderer(size[0], size[1], prefs.phone, prefs.background, prefs.plain());
             f.layout(aspect);
             MediaFormat fmt = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, size[0], size[1]);
             fmt.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
@@ -667,26 +672,33 @@ public class RecorderService extends Service {
         long dur = startedAt == 0 ? 0 : SystemClock.elapsedRealtime() - startedAt;
         startedAt = 0;
         String message;
-        Uri uri = null;
+        boolean ready = false;
         if (ok && tmp != null && tmp.length() > 0) {
-            String name = "FrameCast_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".mp4";
-            try {
-                uri = Saver.save(this, tmp, name);
-                Prefs.setLast(this, uri.toString(), name, dur);
-                //noinspection ResultOfMethodCallIgnored
-                tmp.delete();
-                message = "Video saved: Movies/FrameCast";
-                if (!sawContent) message += " (the screen came through black: choose \"Entire screen\" next time)";
-                if (silent) message += " (no voice: the mic heard nothing)";
-            } catch (Throwable t) {
-                Prefs.setLast(this, Uri.fromFile(tmp).toString(), tmp.getName(), dur);
-                message = "Could not save to Gallery (" + t.getMessage() + ")";
+            // An older recording still waiting for a decision is saved, never lost.
+            String old = Prefs.pendingPath(this);
+            if (old != null && new File(old).exists()) {
+                try {
+                    String oldName = "FrameCast_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+                            .format(new Date(new File(old).lastModified())) + ".mp4";
+                    Uri u = Saver.save(this, new File(old), oldName);
+                    Prefs.setLast(this, u.toString(), oldName, Prefs.pendingMs(this));
+                    //noinspection ResultOfMethodCallIgnored
+                    new File(old).delete();
+                } catch (Throwable ignored) {
+                }
             }
+            File keep = new File(tmp.getParentFile(), "rec_" + System.currentTimeMillis() + ".mp4");
+            if (!tmp.renameTo(keep)) keep = tmp;
+            Prefs.setPending(this, keep.getAbsolutePath(), dur);
+            ready = true;
+            message = "Recording ready: Save, Trim or Discard";
+            if (!sawContent) message += ". The screen came through black: choose \"Entire screen\" next time.";
+            if (silent) message += ". No voice: the mic heard nothing.";
         } else {
             message = dur < 1500 ? "Recording was too short, not saved" : "Could not save the recording";
         }
         final String msg = message;
-        final boolean saved = uri != null;
+        final boolean saved = ready;
         main.post(new Runnable() {
             @Override
             public void run() {
@@ -729,6 +741,7 @@ public class RecorderService extends Service {
     }
 
     private void openApp() {
+        // MainActivity forwards to the review screen while a recording is waiting.
         Intent i = new Intent(this, MainActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 .putExtra("saved", true);
@@ -789,7 +802,7 @@ public class RecorderService extends Service {
             ensureChannel();
             Notification n = new Notification.Builder(this, CHANNEL)
                     .setSmallIcon(R.drawable.ic_notif)
-                    .setContentTitle("Video saved")
+                    .setContentTitle("Recording ready")
                     .setContentText(msg)
                     .setContentIntent(appIntent())
                     .setAutoCancel(true)
