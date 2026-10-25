@@ -1,6 +1,7 @@
 package com.akhil.framecast;
 
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -27,6 +28,8 @@ import android.widget.TextView;
  *       below stays still, and you draw arrows, boxes and pen lines on top.
  *       The real screen stays visible at full quality (no copied picture).</li>
  *   <li><b>White / Black board</b>: same, on a plain white or black page.</li>
+ *   <li><b>Photo</b>: any picture from the phone, full screen, to draw on.
+ *       It always records, even when the app behind blocks recording.</li>
  *   <li>Back to <b>Live</b>: all marks are removed and the phone works again.</li>
  * </ul>
  * The panel can be dragged anywhere, even mostly off the screen.
@@ -81,6 +84,8 @@ final class OverlayController {
         panel = null;
         shown = false;
         frozen = false;
+        if (picture != null) picture.recycle();
+        picture = null;
         freezing = false;
         collapsed = false;
     }
@@ -91,6 +96,13 @@ final class OverlayController {
             wm.removeViewImmediate(v);
         } catch (Throwable ignored) {
         }
+    }
+
+    /** Recording time; when the screen is coming through black, says so in red. */
+    void setStatus(String time, boolean blocked) {
+        if (timer == null) return;
+        timer.setText(blocked ? time + "\nBlocked" : time);
+        timer.setTextColor(blocked ? Ui.VERMILION : Ui.TEXT);
     }
 
     void setTimer(String text, boolean live) {
@@ -117,6 +129,22 @@ final class OverlayController {
     }
 
     /** Opens a plain white or black page to write on. */
+    static final int PICTURE_BG = 0xFF000000;
+    private Bitmap picture;
+
+    /** Shows a picture full screen (fit, on black) to draw on. Takes ownership of {@code b}. */
+    void openPicture(Bitmap b) {
+        if (!shown || b == null) {
+            if (b != null) b.recycle();
+            return;
+        }
+        if (frozen) goLive();
+        picture = b;
+        ink.setPicture(b);
+        board = PICTURE_BG;
+        enterFreeze();
+    }
+
     void openBoard(int color) {
         if (!shown || freezing || frozen) return;
         board = color;
@@ -156,8 +184,11 @@ final class OverlayController {
         if (ink != null) {
             ink.clear();
             ink.setBoard(0);
+            ink.setPicture(null);
         }
         removeInk();
+        if (picture != null) picture.recycle();
+        picture = null;
         updateButtons();
     }
 
@@ -303,6 +334,17 @@ final class OverlayController {
             }
         });
         addLabel(boards, "Black");
+        addBtn(boards, Icons.PHOTO, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                try {
+                    ctx.startActivity(new Intent(ctx, PickPictureActivity.class)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION));
+                } catch (Throwable ignored) {
+                }
+            }
+        });
+        addLabel(boards, "Photo");
 
         drawTools = new LinearLayout(c);
         drawTools.setOrientation(LinearLayout.VERTICAL);

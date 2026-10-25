@@ -230,6 +230,8 @@ public class MainActivity extends Activity {
         String[][] steps = {
                 {"Live", "While recording, your phone works normally. Tap, scroll and open apps as usual."},
                 {"Draw", "Tap the pencil (Draw) button. The screen stays exactly as it is (full quality) and your finger now draws instead of tapping the app: Arrow, Square or Pen. Change colour, Undo or Clear on the panel."},
+                {"Photo", "Tap Photo on the panel and choose any picture. It opens full screen inside FrameCast so you can draw on it, and it always records."},
+                {"Blocked screen", "If the timer on the panel turns red and says Blocked, the app you are in (for example Groww or a bank app) does not allow recording. Use Photo with a screenshot or a website instead."},
                 {"White / Black board", "Tap White or Black on the panel for a blank page. Write on it with your finger. Tap ▶ Live to close it."},
                 {"Back to Live", "Tap the same button again (now ▶ Live). All marks are removed and the phone works again."},
                 {"Screenshot", "The camera button saves a picture with the phone frame to Gallery → Pictures/FrameCast."},

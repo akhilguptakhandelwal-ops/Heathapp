@@ -40,4 +40,22 @@ public class LibraryActivityTest {
         assertTrue(hasText(root, "Screenshots"));
         assertTrue(hasText(root, "No videos yet"));
     }
+
+    @Test
+    public void showsARecordingWaitingToBeSaved() throws Exception {
+        java.io.File f = new java.io.File(org.robolectric.RuntimeEnvironment.getApplication().getCacheDir(), "rec_wait.mp4");
+        try (java.io.FileOutputStream o = new java.io.FileOutputStream(f)) {
+            o.write(new byte[64]);
+        }
+        Prefs.setPending(org.robolectric.RuntimeEnvironment.getApplication(), f.getAbsolutePath(), 42000);
+        LibraryActivity a = Robolectric.buildActivity(LibraryActivity.class).setup().get();
+        View root = a.findViewById(android.R.id.content);
+        for (int i = 0; i < 50 && !hasText(root, "waiting to be saved"); i++) {
+            Thread.sleep(20);
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+        }
+        assertTrue(hasText(root, "1 recording is waiting to be saved"));
+        assertTrue(hasText(root, "Review & save"));
+        Prefs.setPending(org.robolectric.RuntimeEnvironment.getApplication(), null, 0);
+    }
 }

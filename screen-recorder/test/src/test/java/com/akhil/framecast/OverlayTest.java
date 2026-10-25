@@ -319,4 +319,42 @@ public class OverlayTest {
         idle(20);
         assertTrue(o.isFrozen());
     }
+
+    @Test
+    public void photoShowsFullScreenAndLiveClosesIt() {
+        Bitmap pic = PreviewView.fakeScreen(800, 600);   // a landscape picture
+        int sample = pic.getPixel(40, 40);
+        o.openPicture(pic);
+        assertTrue(o.isFrozen());
+        touch(MotionEvent.ACTION_DOWN, t, 200, 1400);
+        touch(MotionEvent.ACTION_UP, t + 80, 700, 1100);
+        assertEquals(1, ink().count());
+
+        Bitmap shot = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
+        View ink = ink();
+        ink.measure(View.MeasureSpec.makeMeasureSpec(W, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(H, View.MeasureSpec.EXACTLY));
+        ink.layout(0, 0, W, H);
+        ink.draw(new Canvas(shot));
+        Shots.save(shot, "photo_mode.png");
+        // Picture fills the width, centred; black above and below.
+        // 800x600 scaled by 1.35 -> 1080x810, top at (2400-810)/2 = 795.
+        assertTrue("picture shown", Shots.dist(shot.getPixel(54, 795 + 54), sample) < 40);
+        assertTrue("black around", Shots.dist(shot.getPixel(W / 2, 40), 0xFF000000) < 10);
+
+        click("bFreeze");     // Live
+        assertFalse(o.isFrozen());
+        assertTrue("picture released", pic.isRecycled());
+        assertEquals(0, ink().count());
+    }
+
+    @Test
+    public void panelSaysWhenTheScreenIsBlocked() {
+        o.setStatus("00:12", true);
+        android.widget.TextView timer = field("timer");
+        assertTrue(timer.getText().toString().contains("Blocked"));
+        assertEquals(Ui.VERMILION, timer.getCurrentTextColor());
+        o.setStatus("00:13", false);
+        assertEquals("00:13", timer.getText().toString());
+    }
 }

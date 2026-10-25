@@ -8,7 +8,7 @@ import android.graphics.RectF;
 /** Small hand-drawn icons for the tool panel (no icon font, no emoji). */
 final class Icons {
     static final int ARROW = 1, SQUARE = 2, MOUSE = 3, CLICK = 4, UP = 5, DOWN = 6,
-            UNDO = 7, CLEAR = 8, STOP = 9, COLOR = 10, HIDE = 11, CAMERA = 12, PEN = 13, PENCIL = 14, PLAY = 15, WHITEBOARD = 16, BLACKBOARD = 17;
+            UNDO = 7, CLEAR = 8, STOP = 9, COLOR = 10, HIDE = 11, CAMERA = 12, PEN = 13, PENCIL = 14, PLAY = 15, WHITEBOARD = 16, BLACKBOARD = 17, PHOTO = 18;
 
     private static final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private static final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -156,6 +156,17 @@ final class Icons {
                 stroke.setColor(color);
                 stroke.setStrokeWidth(2.1f * u);
                 c.drawLine(x0 + 12 * u, y0 + 18 * u, x0 + 12 * u, y0 + 21 * u, stroke);
+                break;
+            case PHOTO:
+                r.set(x0 + 3.5f * u, y0 + 5 * u, x0 + 20.5f * u, y0 + 19 * u);
+                c.drawRoundRect(r, 2.5f * u, 2.5f * u, stroke);
+                path.moveTo(x0 + 5.5f * u, y0 + 17 * u);
+                path.lineTo(x0 + 10 * u, y0 + 11.5f * u);
+                path.lineTo(x0 + 13 * u, y0 + 14.5f * u);
+                path.lineTo(x0 + 15.5f * u, y0 + 12 * u);
+                path.lineTo(x0 + 18.5f * u, y0 + 17 * u);
+                c.drawPath(path, stroke);
+                c.drawCircle(x0 + 15.5f * u, y0 + 8.8f * u, 1.6f * u, fill);
                 break;
             case HIDE:
                 path.moveTo(x0 + 9 * u, y0 + 6 * u);

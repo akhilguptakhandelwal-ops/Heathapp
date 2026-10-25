@@ -311,6 +311,39 @@ public class LibraryActivity extends Activity {
             row.addView(info, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
             list.addView(row, rl);
         }
+        addWaitingCard();
+    }
+
+    /** A finished recording not saved yet (Save / Cut screen was closed). */
+    private void addWaitingCard() {
+        String p = Prefs.pendingPath(this);
+        if (p == null || !new java.io.File(p).exists() || RecorderService.running) return;
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        int pd = (int) (14 * dp);
+        card.setPadding(pd, pd, pd, pd);
+        card.setBackground(Ui.round(0x26D9A441, 16 * dp, Math.max(1, (int) dp), Ui.AMBER));
+        card.addView(text("1 recording is waiting to be saved", 15, 700, Ui.TEXT));
+        long s = Prefs.pendingMs(this) / 1000;
+        TextView m = text("Length " + String.format(Locale.US, "%d:%02d", s / 60, s % 60)
+                + ". It is not in your Gallery until you save it.", 13, 450, Ui.MUTED);
+        m.setPadding(0, (int) (2 * dp), 0, (int) (10 * dp));
+        card.addView(m);
+        TextView open = text("Review & save", 14, 800, Ui.INK_DARK);
+        open.setPadding((int) (18 * dp), (int) (9 * dp), (int) (18 * dp), (int) (9 * dp));
+        open.setBackground(Ui.round(Ui.AMBER, 30 * dp));
+        open.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                ReviewActivity.openIfPending(LibraryActivity.this);
+            }
+        });
+        LinearLayout.LayoutParams ol = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        card.addView(open, ol);
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        cl.topMargin = (int) (12 * dp);
+        list.addView(card, 0, cl);
+        empty.setVisibility(View.GONE);
     }
 
     private View space() {

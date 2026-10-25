@@ -314,9 +314,10 @@ public class RecorderService extends Service {
             firstTick = SystemClock.uptimeMillis();
             framesIn = 0;
             sawContent = false;
+            blackStreak = 0;
+            blockedToastShown = false;
             render.post(tick);
             main.post(timerUpdater);
-            main.postDelayed(screenCheck, 5000);
         } catch (Throwable t) {
             final String msg = t.getMessage();
             main.post(new Runnable() {
@@ -406,7 +407,14 @@ public class RecorderService extends Service {
                     shot.copyPixelsFromBuffer(scratch);
                 }
                 framesIn++;
-                if (!sawContent && framesIn % 10 == 1) sawContent = hasContent(shot, w, h);
+                if (framesIn % 10 == 1) {
+                    if (hasContent(shot, w, h)) {
+                        sawContent = true;
+                        blackStreak = 0;
+                    } else {
+                        blackStreak++;
+                    }
+                }
                 hidePanel(w, h);
                 shotW = w;
                 shotH = h;
@@ -419,6 +427,9 @@ public class RecorderService extends Service {
 
     private volatile int framesIn;
     private volatile boolean sawContent;
+    /** Sampled frames in a row that were pure black (an app blocking recording). */
+    private volatile int blackStreak;
+    private boolean blockedToastShown;
 
     /** False when every sampled pixel is pure black (what Android sends when capture is blocked). */
     private static boolean hasContent(Bitmap b, int w, int h) {
@@ -430,19 +441,6 @@ public class RecorderService extends Service {
         }
         return false;
     }
-
-    /** A few seconds in: say so if the screen picture is missing or black. */
-    private final Runnable screenCheck = new Runnable() {
-        @Override
-        public void run() {
-            if (!running || stopping) return;
-            if (framesIn == 0) {
-                toast("Android is not sending the screen picture. Stop, start again and allow \"Entire screen\".");
-            } else if (!sawContent) {
-                toast("The screen is coming through black. Stop, start again and choose \"Entire screen\" (not a single app). Some apps (banking, Netflix) also block recording.");
-            }
-        }
-    };
 
     /** Paints over the tool panel so it never shows in the video. */
     private void hidePanel(int w, int h) {
@@ -555,12 +553,27 @@ public class RecorderService extends Service {
             if (!running || stopping || startedAt == 0) return;
             long s = (SystemClock.elapsedRealtime() - startedAt) / 1000;
             OverlayController o = overlay;
-            if (o != null) o.setTimer(String.format(Locale.US, "%02d:%02d", s / 60, s % 60), true);
+            String time = String.format(Locale.US, "%02d:%02d", s / 60, s % 60);
+            // Tell the user right away when the screen comes through black.
+            boolean blocked = (framesIn == 0 && s >= 3) || blackStreak >= 3;
+            if (o != null) o.setStatus(time, blocked);
+            if (blocked && !blockedToastShown) {
+                blockedToastShown = true;
+                Toast.makeText(RecorderService.this, "This screen is not being recorded (it comes through black). Some apps like Groww or banks block recording. Tap Photo on the panel to show a picture instead.", Toast.LENGTH_LONG).show();
+            }
+            if (!blocked) blockedToastShown = false;
             main.postDelayed(this, 500);
         }
     };
 
     // ---------------------------------------------------------------- stop
+
+    /** Shows a picture full screen to draw on (from the Photo button). Main thread. */
+    void showPicture(Bitmap b) {
+        OverlayController o = overlay;
+        if (o != null) o.openPicture(b);
+        else if (b != null) b.recycle();
+    }
 
     /** Safe to call from any thread, any number of times. */
     void requestStop() {
@@ -686,13 +699,16 @@ public class RecorderService extends Service {
         running = false;
         stopping = false;
         main.removeCallbacks(timerUpdater);
+        // Open the review screen first: Android 15+ only lets an app start a
+        // screen from the background while one of its overlay windows is visible.
+        if (saved) openReview();
+        else openApp();
         OverlayController o = overlay;
         if (o != null) o.hide();
         overlay = null;
         stopForegroundCompat();
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
         if (saved) notifySaved(msg);
-        openApp();
         stopSelf();
     }
 
@@ -713,6 +729,15 @@ public class RecorderService extends Service {
         stopForegroundCompat();
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
         stopSelf();
+    }
+
+    private void openReview() {
+        Intent i = new Intent(this, ReviewActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(i);
+        } catch (Throwable t) {
+            openApp();
+        }
     }
 
     private void openApp() {

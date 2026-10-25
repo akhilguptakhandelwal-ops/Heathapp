@@ -17,6 +17,7 @@ A small panel sits on the right edge. It is **not** in the video.
 |---|---|
 | ✎ Draw | Your finger draws instead of tapping the app (the real screen stays visible at full quality): Arrow, Square or Pen; colour; Undo; Clear |
 | White / Black | Opens a blank white page or a black board; write with your finger (pen is ready, dark ink / chalk) |
+| Photo | Pick any picture; it opens full screen inside FrameCast to draw on, and always records |
 | ▶ Live | Removes all marks, closes the freeze / board. Your phone works normally |
 | Camera | Screenshot with the phone frame → Gallery → Pictures/FrameCast |
 | ■ | Stop → review screen: Save, Trim & Save, or Discard (saved to Gallery → Movies/FrameCast) |
@@ -31,7 +32,7 @@ In Live mode nothing covers the screen, so tapping, scrolling and opening apps w
 2. Open FrameCast → **Tools over every screen → Allow** ("Display over other apps").
 3. Allow Notification and Microphone, then **Start recording**.
 
-If the mic hears nothing (another app or a call is using it, or Microphone access is off in Settings), the app says so during recording and when saving.
+If the screen comes through black (an app like Groww blocks recording), the panel timer turns red and says **Blocked**. If the mic hears nothing (another app or a call is using it, or Microphone access is off in Settings), the app says so during recording and when saving.
 
 ## How it works
 

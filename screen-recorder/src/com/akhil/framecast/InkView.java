@@ -27,7 +27,10 @@ final class InkView extends View {
     private final ArrayList<Shape> shapes = new ArrayList<>();
     private Shape current;
 
-    private int boardColor;          // 0 = none, else a solid board (white / black)
+    private int boardColor;
+    private android.graphics.Bitmap picture;        // shown fit-to-screen on the board
+    private final android.graphics.RectF picDst = new android.graphics.RectF();
+    private final Paint picPaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);          // 0 = none, else a solid board (white / black)
 
     private final float dp;
     private final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -46,6 +49,12 @@ final class InkView extends View {
         line.setShadowLayer(3 * dp, 0, 1 * dp, 0x66000000);
         head.setStyle(Paint.Style.FILL);
         head.setShadowLayer(3 * dp, 0, 1 * dp, 0x66000000);
+    }
+
+    /** A picture to show (fit to the screen) on the board, or null. */
+    synchronized void setPicture(android.graphics.Bitmap b) {
+        picture = b;
+        invalidate();
     }
 
     /** Solid board behind the marks (0 = none). */
@@ -122,6 +131,14 @@ final class InkView extends View {
         c.translate(-loc[0], -loc[1]);
         synchronized (this) {
             if (boardColor != 0) c.drawColor(boardColor);
+            if (picture != null && !picture.isRecycled()) {
+                // Fit the picture inside the screen, centred.
+                float vw = getWidth(), vh = getHeight();
+                float k = Math.min(vw / picture.getWidth(), vh / picture.getHeight());
+                float w = picture.getWidth() * k, h = picture.getHeight() * k;
+                picDst.set(loc[0] + (vw - w) / 2, loc[1] + (vh - h) / 2, loc[0] + (vw + w) / 2, loc[1] + (vh + h) / 2);
+                c.drawBitmap(picture, null, picDst, picPaint);
+            }
         }
         drawMarks(c);
         c.restore();
