@@ -63,8 +63,6 @@ export async function homeScreen(root) {
     modal({
       title: 'Settings',
       body: h('div', { class: 'form' },
-        h('label', null, 'Swipe on the image to go next / previous'),
-        seg('swipe', [[true, 'On'], [false, 'Off']]),
         h('label', null, 'Background behind images'),
         seg('bg', [['#0e0c0a', 'Charcoal'], ['#ffffff', 'White'], ['#f3ede2', 'Paper'], ['#1f2a24', 'Forest']]),
         h('label', null, '3-2-1 countdown before recording'),

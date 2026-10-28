@@ -1,6 +1,7 @@
 // Full-screen landscape recording studio.
 import { h, toast, fmt, clamp, uid, r2, debounce, enterImmersive, exitImmersive, keepAwake, modal } from './util.js';
 import { makeBlankPage, askBlankColor } from './media.js';
+import { openPeek } from './peek.js';
 import { icon } from './icons.js';
 import { db } from './db.js';
 import { settings, stageSize } from './settings.js';
@@ -92,15 +93,12 @@ export async function recorderScreen(root, { projectId, appendId }) {
   const colorBtn = h('button', { class: 'rail-btn', title: 'Colour & size', onclick: () => toggleFly(colorFly, colorBtn) }, h('span', { class: 'swatch' }));
   const scriptBtn = h('button', { class: 'rail-btn', title: 'Script on/off', onclick: () => script.setVisible(!script.visible) }, icon('text'));
   const countdownEl = h('div', { class: 'countdown hidden' });
-  const hint = h('div', { class: 'stage-hint' }, 'Swipe ← → for next / previous · Two fingers: zoom · One finger: draw');
+  const hint = h('div', { class: 'stage-hint' }, 'Double-tap a photo to see it big (before recording) · Two fingers: zoom · ◀ ▶ buttons: previous / next');
   const clipNote = h('div', { class: 'clip-note hidden' });
-  const swipeBtn = h('button', { class: `fly-toggle ${settings.swipe ? 'on' : ''}`, onclick: () => { settings.swipe = !settings.swipe; swipeBtn.classList.toggle('on', settings.swipe); swipeBtn.lastChild.textContent = `Swipe to change image: ${settings.swipe ? 'ON' : 'OFF'}`; } },
-    icon('swipe', 18), h('span', null, `Swipe to change image: ${settings.swipe ? 'ON' : 'OFF'}`));
 
   const toolFly = h('div', { class: 'flyout hidden' },
     h('div', { class: 'fly-grid' }, TOOLS.map(([id, ic, label]) =>
       h('button', { class: 'fly-item', 'data-tool': id, title: label, onclick: () => { setTool(id); closeFly(); } }, icon(ic, 24), h('span', null, label)))),
-    swipeBtn,
     h('div', { class: 'fly-label' }, 'Voice effect for new takes (change later in the editor)'),
     h('div', { class: 'chips fly-chips' }, Object.entries(VOICE_PRESETS).map(([id, p]) =>
       h('button', {
@@ -251,7 +249,7 @@ export async function recorderScreen(root, { projectId, appendId }) {
       clipNote.append(icon(sl.kind === 'video' ? 'film' : 'music', 22),
         h('div', null,
           h('b', null, `${sl.kind === 'video' ? 'Video' : 'Audio'} clip · ${fmt(sl.dur)}`),
-          h('div', null, recording ? 'Recording paused. This clip will play here in the final video. Swipe → to continue.' : 'This clip will play here in the final video.')));
+          h('div', null, recording ? 'Recording paused. This clip will play here in the final video. Press Next ▶ to continue.' : 'This clip will play here in the final video.')));
     }
     if (!recording) return;
     if (clip && !paused) { togglePause(); autoPaused = true; } else if (!clip && autoPaused) { autoPaused = false; if (paused) togglePause(); }
@@ -299,12 +297,19 @@ export async function recorderScreen(root, { projectId, appendId }) {
   const M = () => viewMatrix(W, H, st.slides[st.i], st.v);
   const toImg = (p) => rp(invertM(M(), p));
 
-  const isSwipe = (dx, dy, ms) => settings.swipe && Math.abs(dx) > W * 0.16 && Math.abs(dy) < Math.abs(dx) * 0.5 && ms < 450;
-
-  // Remove a stroke completely (also from the log) — used when it was a swipe.
-  function dropStroke(id) {
-    emit({ k: 'adel', id });
-    log = log.filter((ev) => ev.id !== id && ev.a?.id !== id);
+  // Double-tap (only before recording starts) opens the photo full screen.
+  let lastTap = null;
+  function noteTap(p, id) {
+    if (recording) { lastTap = null; return; }
+    const now = performance.now();
+    if (lastTap && now - lastTap.t < 380 && dist(p, lastTap.p) < W * 0.06) {
+      for (const x of [lastTap.id, id]) if (x) emit({ k: 'adel', id: x });
+      lastTap = null;
+      const sl = st.slides[st.i];
+      if (sl) openPeek({ imageId: sl.imageId, w: sl.w, h: sl.h, rot: st.v.r, bitmap: painter.cache.peek(sl.imageId), label: `${st.i + 1}/${st.slides.length} ${sl.name || ''}` });
+      return;
+    }
+    lastTap = { t: now, p, id };
   }
 
   function cancelGesture() {
@@ -360,7 +365,7 @@ export async function recorderScreen(root, { projectId, appendId }) {
     if (g.type === 'pinch') { if (ptrs.size >= 2) movePinch(); return; }
     const p = toStage(e);
     if (g.type === 'pan') {
-      if (g.v0.s > 1.05 || !settings.swipe) emit({ k: 'view', v: rv({ ...st.v, x: st.v.x + p[0] - g.last[0], y: st.v.y + p[1] - g.last[1] }) });
+      emit({ k: 'view', v: rv({ ...st.v, x: st.v.x + p[0] - g.last[0], y: st.v.y + p[1] - g.last[1] }) });
       g.last = p;
     } else if (g.type === 'laser') {
       emit({ k: 'laser', p: toImg(p) });
@@ -378,36 +383,15 @@ export async function recorderScreen(root, { projectId, appendId }) {
     ptrs.delete(e.pointerId);
     if (!g) return;
     if (g.type === 'pinch') {
-      if (ptrs.size < 2) {
-        // Two-finger flick (without zooming) also changes the image.
-        const dx = g.c1[0] - g.c0[0], dy = g.c1[1] - g.c0[1];
-        const ratio = g.d1 / g.d0;
-        if (ratio > 0.8 && ratio < 1.25 && isSwipe(dx, dy, performance.now() - g.t0 + 100)) {
-          emit({ k: 'view', v: g.v0 });
-          go(dx < 0 ? 1 : -1);
-        }
-        g = { type: 'idle' };
-      }
+      if (ptrs.size < 2) g = { type: 'idle' };
     } else if (g.type === 'pan') {
-      const dx = g.last[0] - g.start[0], dy = g.last[1] - g.start[1];
-      // When not zoomed in, dragging sideways flips images like a photo gallery.
-      if (g.v0.s <= 1.05 && settings.swipe && Math.abs(dx) > W * 0.12 && Math.abs(dy) < Math.abs(dx)) {
-        emit({ k: 'view', v: g.v0 });
-        go(dx < 0 ? 1 : -1);
-      }
+      if (dist(g.last, g.start) < 8 && performance.now() - g.t0 < 300) noteTap(g.start, null);
       g = null;
     } else if (g.type === 'laser') {
       emit({ k: 'laser', p: null });
       g = null;
     } else if (g.type === 'draw') {
-      const dx = g.last[0] - g.start[0], dy = g.last[1] - g.start[1];
-      if (g.moved && isSwipe(dx, dy, performance.now() - g.t0) && tool !== 'circle' && tool !== 'rect') {
-        // A fast sideways flick = next / previous, not a drawing.
-        dropStroke(g.id);
-        g = null;
-        go(dx < 0 ? 1 : -1);
-        return;
-      }
+      const tapped = !g.moved && performance.now() - g.t0 < 300;
       if (!g.moved && SHAPES.has(tool)) {
         if (tool === 'tick' || tool === 'cross') {
           // A tap stamps a ready-made tick / cross.
@@ -419,6 +403,7 @@ export async function recorderScreen(root, { projectId, appendId }) {
           emit({ k: 'adel', id: g.id });
         }
       }
+      if (tapped) noteTap(g.start, g.id);
       g = null;
     } else {
       g = null;
@@ -622,17 +607,8 @@ export async function recorderScreen(root, { projectId, appendId }) {
       body,
       h('div', { class: 'sp-note' }, 'Only you see this — not recorded'));
 
-    let sw = null;
-    body.addEventListener('pointerdown', (e) => { touching = true; clearTimeout(touchTimer); sw = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+    body.addEventListener('pointerdown', () => { touching = true; clearTimeout(touchTimer); });
     const release = () => { clearTimeout(touchTimer); touchTimer = setTimeout(() => { touching = false; }, 700); };
-    // A quick sideways swipe on the script also changes the image.
-    body.addEventListener('pointerup', (e) => {
-      if (sw && settings.swipe) {
-        const dx = e.clientX - sw.x, dy = e.clientY - sw.y;
-        if (Math.abs(dx) > 70 && Math.abs(dy) < Math.abs(dx) * 0.6 && performance.now() - sw.t < 500) go(dx < 0 ? 1 : -1);
-      }
-      sw = null;
-    });
     body.addEventListener('pointerup', release);
     body.addEventListener('pointercancel', release);
     body.addEventListener('touchend', release);

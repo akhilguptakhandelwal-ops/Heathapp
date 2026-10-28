@@ -1,10 +1,10 @@
 // Offline support: network first, cached copy when offline.
-const CACHE = 'slidevox-v8';
+const CACHE = 'slidevox-v9';
 const ASSETS = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/util.js', 'js/db.js', 'js/settings.js', 'js/icons.js', 'js/renderer.js',
   'js/mix.js', 'js/home.js', 'js/project.js', 'js/recorder.js', 'js/editor.js',
-  'js/media.js', 'js/export.js', 'js/version.js', 'js/update.js', 'js/vendor/mediabunny.min.mjs',
+  'js/media.js', 'js/export.js', 'js/version.js', 'js/update.js', 'js/peek.js', 'js/vendor/mediabunny.min.mjs',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 

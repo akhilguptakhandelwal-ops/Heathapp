@@ -18,7 +18,8 @@ Local testing: `npx http-server -p 8080` then open `http://localhost:8080`.
 2. **Script** → text paste karein (teleprompter ke liye).
 3. **Video shape**: Landscape 16:9 (YouTube) ya Portrait 9:16 (Shorts / Reels).
 4. **Create video & record voice** → full screen.
-   - **Swipe ← →** se next / previous image (button ki zarurat nahi). Pen ke saath tez flick, Move tool se normal swipe, ya do ungliyon se swipe. Tools menu mein on/off.
+   - Next / previous sirf ◀ ▶ buttons se (swipe band hai, taaki galti se slide na badle).
+   - Recording shuru karne se pehle photo par **double-tap** = photo bada dikhega; ek tap = band.
    - Video/audio clip par pahunchte hi recording apne aap pause hoti hai; final video mein clip wahi chalegi. Aage swipe karte hi recording phir chalu.
    - Left side: Record / Stop, Pause, mic level, previous / next image.
    - Right side: Tools (pen, highlighter, tick, cross, circle, square, arrow, line, laser pointer, move), colour & size, undo, **delete all marks**, rotate, fit, script on/off.
@@ -48,8 +49,8 @@ Code: `js/recorder.js` (studio), `js/editor.js` (timeline), `js/export.js` (fina
 
 `npm test` (aur GitHub par "Feature check") inn sab ko asli browser mein chala kar check karta hai:
 
-- **Home:** projects, install card, version + update check, settings (swipe, background, countdown, auto-save), Intro & outro library (Start / End / Off)
-- **Project:** rename, images, video/audio clips, White/Black blank page, item menu (rotate, blank before/after, delete), ☰ drag order, sort, Select → Select all → multi delete, script + word count, 16:9 / 9:16
-- **Recorder:** record / pause / stop, countdown, teleprompter (speed, size, move, auto-scroll, hide), voice effect chips, pen, highlighter, line, arrow, circle, square, tick, cross, laser, colours, sizes, undo, delete all marks, zoom (pinch / wheel), pan, fit, rotate, swipe (pen flick, move tool, two fingers, on script), prev / next / arrow keys, + Page while recording with auto pen colour, clip auto-pause, continue recording
+- **Home:** projects, install card, version + update check, settings (background, countdown, auto-save), Intro & outro library (Start / End / Off)
+- **Project:** rename, images, video/audio clips, White/Black blank page, item menu (rotate, blank before/after, delete), ☰ drag order, sort, Select → Select all → multi delete, thumbnail tap = picture big, script + word count, 16:9 / 9:16
+- **Recorder:** record / pause / stop, countdown, teleprompter (speed, size, move, auto-scroll, hide), voice effect chips, pen, highlighter, line, arrow, circle, square, tick, cross, laser, colours, sizes, undo, delete all marks, zoom (pinch / wheel), pan, fit, rotate, double-tap = picture big (before recording), prev / next buttons + arrow keys (swipe is switched off on purpose), + Page while recording with auto pen colour, clip auto-pause, continue recording
 - **Editor:** preview play, full-screen preview, timeline zoom / fit / tap / long-press select, Video / Voice / Music tracks, ✂ cut start/end, Delete, Volume, Undo / Redo / Restore, clip Skip / Include, voice effects + fine tune, voice volume, music (add, volume, start, loop, fade, priority, dip), rename / delete take
 - **Export:** Low / Medium / High / YouTube / 4K, saved clips at Start / After #N / End, fast encoder + real-time fallback, play full screen, Save (Documents/SlideVox), Share

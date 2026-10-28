@@ -2,6 +2,7 @@ import { h, uid, debounce, promptBox, confirmBox, pickFiles, prepareImage, toast
 import { icon } from './icons.js';
 import { db, blobsUsedBy, deleteRecording } from './db.js';
 import { importClip, makeBlankPage, askBlankColor } from './media.js';
+import { openPeek } from './peek.js';
 
 // Drag rows by their handle to reorder. Works with touch and mouse.
 export function makeSortable(list, onMove) {
@@ -154,7 +155,8 @@ export async function projectScreen(root, { projectId }) {
       list.append(h('div', { class: `item-row kind-${kind}` },
         h('button', { class: 'drag-handle', title: 'Drag to reorder', 'aria-label': 'Drag to reorder' }, icon('grip', 22)),
         h('span', { class: 'item-no' }, String(i + 1)),
-        h('div', { class: 'item-thumb' }, img, kind !== 'image' && h('span', { class: 'item-badge' }, icon(kind === 'video' ? 'film' : 'music', 14))),
+        h('div', { class: 'item-thumb', title: 'Tap to see it big', onclick: () => openPeek({ imageId: s.imageId, w: s.w, h: s.h, rot: s.rot || 0, label: `${i + 1}. ${s.name || ''}` }) },
+          img, kind !== 'image' && h('span', { class: 'item-badge' }, icon(kind === 'video' ? 'film' : 'music', 14))),
         h('div', { class: 'item-meta' },
           h('div', { class: 'item-name' }, s.name || `Image ${i + 1}`),
           h('div', { class: 'muted small' }, s.blank ? 'Blank page' : kind === 'image' ? `${s.w}×${s.h}` : `${KIND_LABEL[kind]} · ${fmt(s.dur)}`)),
@@ -357,7 +359,7 @@ export async function projectScreen(root, { projectId }) {
           h('button', { class: 'btn small', onclick: addImages }, icon('plus', 16), 'Add images'),
           h('button', { class: 'btn small', onclick: addClips }, icon('plus', 16), 'Add video / audio'),
           h('button', { class: 'btn small', onclick: () => addBlank() }, icon('plus', 16), 'Blank page')),
-        h('p', { class: 'muted small hint-line' }, 'Hold ☰ and drag to change the order. Video/audio clips play in the final video at the point you swipe to them while recording.')),
+        h('p', { class: 'muted small hint-line' }, 'Hold ☰ and drag to change the order. Video/audio clips play in the final video at the point you reach them (Next ▶) while recording. Tap a picture to see it big.')),
       scriptCard,
       h('section', { class: 'card' },
         h('div', { class: 'card-head' }, h('h2', null, icon('fit', 18), 'Video shape')),

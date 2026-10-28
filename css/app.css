@@ -429,3 +429,7 @@ canvas.tl { display: block; width: 100%; height: 222px; touch-action: none; curs
 .rail-right { gap: 5px; }
 .rail-right .rail-btn { height: 40px; }
 .rail-btn.page-btn { color: var(--accent-2); }
+
+.peek { position: fixed; inset: 0; z-index: 60; background: #000; touch-action: none; cursor: zoom-out; }
+.peek-cv { width: 100%; height: 100%; display: block; }
+.peek-hint { position: absolute; left: 50%; bottom: calc(14px + var(--safe-b)); transform: translateX(-50%); background: rgba(14, 12, 10, .8); color: var(--text); font-size: 13px; padding: 6px 14px; border-radius: 20px; white-space: nowrap; pointer-events: none; }

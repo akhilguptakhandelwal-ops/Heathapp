@@ -107,9 +107,10 @@ await check('Home screen loads with install card and version', async () => {
   expect(await p.isVisible('.install-card:not(.hidden)'), 'install card missing');
   expect((await p.textContent('.version-foot')).includes('Web app'), 'version missing');
 });
-await check('Settings: swipe, background, countdown, auto-save, update check', async () => {
+await check('Settings: background, countdown, auto-save, update check (no swipe option)', async () => {
   await p.click('[title="Settings"]');
-  for (const t of ['Swipe on the image', 'Background behind images', '3-2-1 countdown', 'Save every exported video', 'Version']) expect(await p.isVisible(`.modal >> text=${t}`), `missing: ${t}`);
+  expect(!(await p.isVisible('.modal >> text=Swipe')), 'swipe setting still there');
+  for (const t of ['Background behind images', '3-2-1 countdown', 'Save every exported video', 'Version']) expect(await p.isVisible(`.modal >> text=${t}`), `missing: ${t}`);
   await p.click('.modal .btn.primary');
 });
 await check('Intro / outro library: add clip, set Start/End/Off', async () => {
@@ -166,6 +167,12 @@ await check('Drag ☰ to reorder', async () => {
   const after = await p.locator('.item-name').allTextContents();
   expect(after.join() !== before.join(), 'order unchanged');
 });
+await check('Tap a thumbnail → picture opens big, tap closes', async () => {
+  await p.click('.item-row >> nth=0 >> .item-thumb');
+  await p.waitForSelector('.peek'); await p.waitForTimeout(400);
+  await p.mouse.click(100, 100);
+  await p.waitForSelector('.peek', { state: 'detached' });
+});
 await check('Sort by name', async () => { await p.click('.card-head .btn >> text=Sort'); await p.waitForTimeout(200); });
 await check('Multi-select: select all / none, delete several', async () => {
   await p.click('.card-head .btn >> text=Select');
@@ -220,8 +227,19 @@ await check('Teleprompter controls: speed, size, move, auto-scroll', async () =>
 await check('Voice effect chips in the tools menu', async () => {
   await p.click('.rail-right .rail-btn >> nth=0');
   await p.click('.fly-chips .chip >> text=Energetic');
-  expect(await p.isVisible('.fly-toggle >> text=Swipe to change image: ON'), 'swipe toggle missing');
+  expect(!(await p.isVisible('.fly-toggle')), 'swipe toggle still there');
   await p.click('.fly-item[data-tool="pen"]');
+});
+await check('Before recording: double-tap opens the photo big, single tap closes', async () => {
+  const b = await stage();
+  const x = b.x + b.width * 0.3, y = b.y + b.height * 0.7;
+  await p.mouse.click(x, y); await p.waitForTimeout(80); await p.mouse.click(x, y);
+  await p.waitForSelector('.peek');
+  await p.waitForTimeout(400);
+  await p.mouse.click(200, 200);
+  await p.waitForSelector('.peek', { state: 'detached' });
+  const marks = await p.evaluate(() => document.querySelectorAll('.peek').length);
+  expect(marks === 0, 'peek still open');
 });
 await check('Record starts (mic)', async () => {
   await p.click('.rec-btn'); await p.waitForTimeout(800);
@@ -254,11 +272,25 @@ await check('Zoom (wheel + pinch-style), fit, rotate', async () => {
   await p.click('[title="Rotate image"]'); await p.click('[title="Rotate image"]'); await p.click('[title="Rotate image"]'); await p.click('[title="Rotate image"]');
   await tool('pen');
 });
-await check('Swipe (pen flick) → next is the black page, pen turns white', async () => {
+await check('Swipe does NOT change the image (pen flick, move-tool drag)', async () => {
   await p.waitForTimeout(500);
-  const y = sb.y + sb.height * 0.85; // left/bottom: away from the script panel
+  const y = sb.y + sb.height * 0.85;
   await drag(sb.x + sb.width * 0.5, y, sb.x + sb.width * 0.05, y, 3, 0);
+  await tool('move');
+  await drag(sb.x + sb.width * 0.5, y, sb.x + sb.width * 0.05, y, 6, 0);
+  await p.click('[title="Fit to screen"]');
+  await tool('pen');
   await p.waitForTimeout(300);
+  expect((await p.textContent('.slide-count')).startsWith('1/'), `moved to ${await p.textContent('.slide-count')}`);
+});
+await check('Double-tap while recording does not open the photo', async () => {
+  const x = sb.x + sb.width * 0.2, y = sb.y + sb.height * 0.8;
+  await p.mouse.click(x, y); await p.waitForTimeout(80); await p.mouse.click(x, y);
+  await p.waitForTimeout(300);
+  expect(!(await p.isVisible('.peek')), 'peek opened during recording');
+});
+await check('Next button → black page, pen turns white', async () => {
+  await p.click('[title="Next image"]');
   expect((await p.textContent('.slide-count')).startsWith('2/'), `count ${await p.textContent('.slide-count')}`);
   const c = await p.evaluate(() => getComputedStyle(document.querySelector('.swatch')).backgroundColor);
   expect(c === 'rgb(255, 255, 255)', `pen ${c}`);
@@ -274,19 +306,17 @@ await check('Next button → slide 2, pen colour restored', async () => {
   const c = await p.evaluate(() => getComputedStyle(document.querySelector('.swatch')).backgroundColor);
   expect(c !== 'rgb(255, 255, 255)', 'pen not restored');
 });
-await check('Move-tool swipe → video clip pauses recording', async () => {
+await check('Next → video clip pauses recording', async () => {
   await p.waitForTimeout(600);
-  await tool('move');
-  await drag(sb.x + sb.width * 0.5, sb.y + sb.height * 0.85, sb.x + sb.width * 0.05, sb.y + sb.height * 0.85, 6, 0);
+  await p.click('[title="Next image"]');
   await p.waitForTimeout(300);
   expect(await p.isVisible('.clip-note'), 'clip note missing');
   expect((await p.getAttribute('.rec-screen', 'class')).includes('is-paused'), 'not auto-paused');
 });
-await check('Swipe on → recording resumes', async () => {
-  await drag(sb.x + sb.width * 0.5, sb.y + sb.height * 0.85, sb.x + sb.width * 0.05, sb.y + sb.height * 0.85, 6, 0);
+await check('Next again → recording resumes', async () => {
+  await p.click('[title="Next image"]');
   await p.waitForTimeout(300);
   expect((await p.getAttribute('.rec-screen', 'class')).includes('is-rec'), 'not resumed');
-  await tool('pen');
 });
 await check('+ Page during recording (white) → black pen', async () => {
   await p.waitForTimeout(600);
